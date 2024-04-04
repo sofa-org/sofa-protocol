@@ -1,0 +1,20 @@
+node_modules
+.env*
+coverage
+coverage.json
+typechain
+.DS_Store
+
+#Hardhat files
+cache
+artifacts
+abis
+.openzeppelin
+
+.npm*
+.eslint*
+.prettier*
+.solhint*
+package-lock.json
+
+hs_err_*.log
