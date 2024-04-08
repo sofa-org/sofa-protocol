@@ -14,6 +14,7 @@ const { parseEther, keccak256, solidityKeccak256, solidityPack, toUtf8Bytes } = 
 describe("LeverageSmartTrendVault", function () {
   async function deployFixture() {
     const UNI_ROUTERV2_ADDR = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
+    const UNI_ROUTERV3_ADDR = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
     const uniRouterV2 = await ethers.getContractAt("IUniswapV2Router", UNI_ROUTERV2_ADDR);
 
     const UNI_FACTORY_ADDR = await uniRouterV2.factory();
@@ -103,7 +104,8 @@ describe("LeverageSmartTrendVault", function () {
     const feeCollector = await FeeCollector.deploy(
       governance.address,
       parseEther("0.01"), // Mock fee rate 1%
-      UNI_ROUTERV2_ADDR
+      UNI_ROUTERV2_ADDR,
+      UNI_ROUTERV3_ADDR
     );
 
     const vault = await upgrades.deployProxy(Vault, [
