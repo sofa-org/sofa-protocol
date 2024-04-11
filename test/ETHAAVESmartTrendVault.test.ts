@@ -134,6 +134,7 @@ describe("ETHAAVESmartTrendVault", function () {
     anchorPrices: Array<string>,
     collateralAtRisk: string,
     makerCollateral: string,
+    makerBalanceThreshold: string,
     deadline: number,
     collateral: any,
     vault: any,
@@ -149,6 +150,7 @@ describe("ETHAAVESmartTrendVault", function () {
       { name: 'anchorPrices', type: 'uint256[2]' },
       { name: 'collateralAtRisk', type: 'uint256' },
       { name: 'makerCollateral', type: 'uint256' },
+      { name: 'makerBalanceThreshold', type: 'uint256' },
       { name: 'deadline', type: 'uint256' },
       { name: 'vault', type: 'address' },
     ] };
@@ -159,6 +161,7 @@ describe("ETHAAVESmartTrendVault", function () {
       anchorPrices: anchorPrices,
       collateralAtRisk: collateralAtRisk,
       makerCollateral: makerCollateral,
+      makerBalanceThreshold: makerBalanceThreshold,
       deadline: deadline,
       vault: vault.address,
     };
@@ -167,12 +170,13 @@ describe("ETHAAVESmartTrendVault", function () {
     // Call mint function
     const tx = await vault
         .connect(minter)
-        ['mint((uint256,uint256[2],uint256,uint256,uint256,address,bytes),address)'](
+        ['mint((uint256,uint256[2],uint256,uint256,uint256,uint256,address,bytes),address)'](
           {
             expiry: expiry,
             anchorPrices: anchorPrices,
             collateralAtRisk: collateralAtRisk,
             makerCollateral: makerCollateral,
+            makerBalanceThreshold: makerBalanceThreshold,
             deadline: deadline,
             maker: maker.address,
             makerSignature: makerSignature
@@ -201,9 +205,11 @@ describe("ETHAAVESmartTrendVault", function () {
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
       const collateralAtRisk = parseEther("10");
       const makerCollateral = parseEther("10");
+      const makerBalanceThreshold = parseEther("100000");
       const deadline = await time.latest() + 600;
       const balanceBefore = await minter.getBalance();
-      const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
       const balanceAfter = await minter.getBalance();
       expect(balanceBefore.sub(balanceAfter)).to.above(parseEther("90"));
       // Perform assertions
@@ -226,10 +232,11 @@ describe("ETHAAVESmartTrendVault", function () {
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       let collateralAtRisk = parseEther("20");
       const makerCollateral = parseEther("10");
+      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      let { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      let { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
@@ -256,7 +263,8 @@ describe("ETHAAVESmartTrendVault", function () {
 
       // strike case
       anchorPrices = [parseEther("27000"), parseEther("33000")];
-      ({ collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain));
+      makerBalanceThreshold = parseEther("99990");
+      ({ collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain));
       await time.increaseTo(expiry);
       await oracle.settle();
       minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
@@ -287,10 +295,12 @@ describe("ETHAAVESmartTrendVault", function () {
       let anchorPricesB = [parseEther("27000"), parseEther("33000")];
       let collateralAtRisk = parseEther("20");
       const makerCollateral = parseEther("10");
+      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
 
-      const { collateralAtRiskPercentage: collateralAtRiskPercentageA } = await mint(totalCollateral, expiry, anchorPricesA, collateralAtRisk, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
-      const { collateralAtRiskPercentage: collateralAtRiskPercentageB } = await mint(totalCollateral, expiry, anchorPricesB, collateralAtRisk, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain)
+      const { collateralAtRiskPercentage: collateralAtRiskPercentageA } = await mint(totalCollateral, expiry, anchorPricesA, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      makerBalanceThreshold = parseEther("99990");
+      const { collateralAtRiskPercentage: collateralAtRiskPercentageB } = await mint(totalCollateral, expiry, anchorPricesB, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
       await time.increaseTo(expiry);
       await oracle.settle();

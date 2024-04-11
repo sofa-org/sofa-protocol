@@ -29,6 +29,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         uint256 expiry;
         uint256[2] anchorPrices;
         uint256 makerCollateral;
+        uint256 makerBalanceThreshold;
         uint256 deadline;
         address maker;
         bytes makerSignature;
@@ -40,9 +41,9 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
     // );
     bytes32 public constant EIP712DOMAIN_TYPEHASH = 0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
     // bytes32 public constant MINT_TYPEHASH = keccak256(
-    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 makerCollateral,uint256 deadline,address vault)"
+    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 makerCollateral,uint256 makerBalanceThreshold,uint256 deadline,address vault)"
     // );
-    bytes32 public constant MINT_TYPEHASH = 0xe8015bbde99f68dcef36fec6eec1f414ef04b9f79422109663be9c2c47e3dc30;
+    bytes32 public constant MINT_TYPEHASH = 0xe40d8ddd167626853ea4f67c19938e934054678d32ce5c5a449fa8230d8d5807;
 
     string public name;
     string public symbol;
@@ -147,6 +148,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
+        require(params.makerBalanceThreshold <= COLLATERAL.balanceOf(params.maker), "Vault: invalid balance threshold");
         require(referral != _msgSender(), "Vault: invalid referral");
 
         {
@@ -161,6 +163,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
                                      params.expiry,
                                      keccak256(abi.encodePacked(params.anchorPrices)),
                                      params.makerCollateral,
+                                     params.makerBalanceThreshold,
                                      params.deadline,
                                      address(this)))
         ));
@@ -241,6 +244,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             // require expiry must be 8:00 UTC
             require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
             require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
+            require(params.makerBalanceThreshold <= COLLATERAL.balanceOf(params.maker), "Vault: invalid balance threshold");
 
             {
             // verify maker's signature
@@ -254,6 +258,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
                                                                 params.expiry,
                                                                 keccak256(abi.encodePacked(params.anchorPrices)),
                                                                 params.makerCollateral,
+                                                                params.makerBalanceThreshold,
                                                                 params.deadline,
                                                                 address(this)))
                           ));

@@ -32,6 +32,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256[2] anchorPrices;
         uint256 collateralAtRisk;
         uint256 makerCollateral;
+        uint256 makerBalanceThreshold;
         uint256 deadline;
         address maker;
         bytes makerSignature;
@@ -43,9 +44,9 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     // );
     bytes32 public constant EIP712DOMAIN_TYPEHASH = 0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
     // bytes32 public constant MINT_TYPEHASH = keccak256(
-    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 collateralAtRisk,uint256 makerCollateral,uint256 deadline,address vault)"
+    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 collateralAtRisk,uint256 makerCollateral,uint256 makerBalanceThreshold,uint256 deadline,address vault)"
     // );
-    bytes32 public constant MINT_TYPEHASH = 0xbbb96bd81b8359e3021ab4bd0188b2fb99443a6debe51f7cb0a925a398f17117;
+    bytes32 public constant MINT_TYPEHASH = 0xc7f7de88d8af971dc331c90646290c0b9c3f2047f8964852abdcb4fce18c7380;
     uint256 public constant LEVERAGE_RATIO = 9; // 9x
     uint256 internal constant SECONDS_IN_YEAR = 365 days;
 
@@ -158,6 +159,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
+        require(params.makerBalanceThreshold <= COLLATERAL.balanceOf(params.maker), "Vault: invalid balance threshold");
         require(referral != _msgSender(), "Vault: invalid referral");
 
         {
@@ -173,6 +175,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
                                      keccak256(abi.encodePacked(params.anchorPrices)),
                                      params.collateralAtRisk,
                                      params.makerCollateral,
+                                     params.makerBalanceThreshold,
                                      params.deadline,
                                      address(this)))
         ));

@@ -130,6 +130,7 @@ describe("DNTVault", function () {
     expiry: number,
     anchorPrices: Array<string>,
     makerCollateral: string,
+    makerBalanceThreshold: string,
     deadline: number,
     minterNonce: number,
     collateral: any,
@@ -159,6 +160,7 @@ describe("DNTVault", function () {
       { name: 'expiry', type: 'uint256' },
       { name: 'anchorPrices', type: 'uint256[2]' },
       { name: 'makerCollateral', type: 'uint256' },
+      { name: 'makerBalanceThreshold', type: 'uint256' },
       { name: 'deadline', type: 'uint256' },
       { name: 'vault', type: 'address' },
     ] };
@@ -168,6 +170,7 @@ describe("DNTVault", function () {
       expiry: expiry,
       anchorPrices: anchorPrices,
       makerCollateral: makerCollateral,
+      makerBalanceThreshold: makerBalanceThreshold,
       deadline: deadline,
       vault: vault.address,
     };
@@ -176,12 +179,13 @@ describe("DNTVault", function () {
     // Call mint function
     await vault
         .connect(minter)
-        ["mint(uint256,(uint256,uint256[2],uint256,uint256,address,bytes),bytes,uint256,address)"](
+        ["mint(uint256,(uint256,uint256[2],uint256,uint256,uint256,address,bytes),bytes,uint256,address)"](
           totalCollateral,
           {
             expiry: expiry,
             anchorPrices: anchorPrices,
             makerCollateral: makerCollateral,
+            makerBalanceThreshold: makerBalanceThreshold,
             deadline: deadline,
             maker: maker.address,
             makerSignature: makerSignature
@@ -208,13 +212,14 @@ describe("DNTVault", function () {
     let paramsArray = [];
     let minterCollateral = BigNumber.from(0);
     for (let i = 0; i < params.length; i++) {
-      const { totalCollateral, expiry, anchorPrices, makerCollateral, deadline, maker } = params[i];
+      const { totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, maker } = params[i];
       const makerSignatureTypes = { Mint: [
         { name: 'minter', type: 'address' },
         { name: 'totalCollateral', type: 'uint256' },
         { name: 'expiry', type: 'uint256' },
         { name: 'anchorPrices', type: 'uint256[2]' },
         { name: 'makerCollateral', type: 'uint256' },
+        { name: 'makerBalanceThreshold', type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
         { name: 'vault', type: 'address' },
       ] };
@@ -224,6 +229,7 @@ describe("DNTVault", function () {
         expiry: expiry,
         anchorPrices: anchorPrices,
         makerCollateral: makerCollateral,
+        makerBalanceThreshold: makerBalanceThreshold,
         deadline: deadline,
         vault: vault.address,
       };
@@ -233,6 +239,7 @@ describe("DNTVault", function () {
         expiry: expiry,
         anchorPrices: anchorPrices,
         makerCollateral: makerCollateral,
+        makerBalanceThreshold: makerBalanceThreshold,
         deadline: deadline,
         maker: maker.address,
         makerSignature: makerSignature
@@ -254,7 +261,7 @@ describe("DNTVault", function () {
     // Call mint function
     await vault
         .connect(minter)
-        ["mintBatch(uint256[],(uint256,uint256[2],uint256,uint256,address,bytes)[],bytes,uint256,uint256,address)"](
+        ["mintBatch(uint256[],(uint256,uint256[2],uint256,uint256,uint256,address,bytes)[],bytes,uint256,uint256,address)"](
           totalCollaterals,
           paramsArray,
           minterPermitSignature,
@@ -271,9 +278,12 @@ describe("DNTVault", function () {
       const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
+      const makerBalanceThreshold = parseEther("100000");
       const deadline = await time.latest() + 600;
-      const minterNonce = 0;
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      let minterNonce = 0;
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      minterNonce = 1;
+      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
       // Perform assertions
       const term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256[2]", "uint256"], [term, expiry, anchorPrices, 0]);
@@ -295,9 +305,14 @@ describe("DNTVault", function () {
       const makerCollateral = parseEther("10");
       const deadline = await time.latest() + 600;
       const minterNonce = 0;
+      await expect(mintBatch([
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("100000"), deadline: deadline, maker: maker },
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("100000"), deadline: deadline, maker: maker }
+      ], deadline, minterNonce, collateral, vault, minter, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
+
       await mintBatch([
-        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker },
-        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker }
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("100000"), deadline: deadline, maker: maker },
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("99990"), deadline: deadline, maker: maker }
       ], deadline, minterNonce, collateral, vault, minter, referral, eip721Domain);
       // Perform assertions
       const term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
@@ -318,10 +333,11 @@ describe("DNTVault", function () {
       let expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
+      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
@@ -345,13 +361,13 @@ describe("DNTVault", function () {
 
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       deadline = await time.latest() + 600;
-      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.reverted;
+      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.reverted;
 
       // strike case
       minterNonce = 1;
       anchorPrices = [parseEther("27000"), parseEther("33000")];
       term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
       await time.increaseTo(expiry);
       await expect(oracle.settle()).to.be.revertedWith("Oracle: not updated");
       await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
@@ -372,7 +388,7 @@ describe("DNTVault", function () {
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400 * 3;
       deadline = await time.latest() + 600;
       term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
       await time.increaseTo(expiry - 86400 * 2);
       await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
       await oracle.settle();
@@ -398,10 +414,11 @@ describe("DNTVault", function () {
       let expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400 * 2;
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
+      const makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
@@ -429,13 +446,15 @@ describe("DNTVault", function () {
       let anchorPricesA = [parseEther("28000"), parseEther("30000")];
       let anchorPricesB = [parseEther("27000"), parseEther("33000")];
       const makerCollateral = parseEther("10");
+      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       minterNonce = 1;
-      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)
+      makerBalanceThreshold = parseEther("99990");
+      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)
 
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       await time.increaseTo(expiry);
@@ -462,13 +481,15 @@ describe("DNTVault", function () {
       let anchorPricesA = [parseEther("28000"), parseEther("30000")];
       let anchorPricesB = [parseEther("27000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
+      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       minterNonce = 1;
-      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)
+      makerBalanceThreshold = parseEther("99990");
+      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)
 
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       await time.increaseTo(expiry);
