@@ -110,6 +110,9 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         feeCollector = feeCollector_;
         depositAPR = depositAPR_;
 
+        __Context_init();
+        __ERC1155_init("");
+        __ReentrancyGuard_init();
         __Ownable_init();
     }
 
@@ -160,6 +163,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
         require(params.makerBalanceThreshold <= COLLATERAL.balanceOf(params.maker), "Vault: invalid balance threshold");
+        require(params.collateralAtRisk <= totalCollateral, "Vault: invalid collateral");
         require(referral != _msgSender(), "Vault: invalid referral");
 
         {
@@ -239,13 +243,13 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
             (payoff, fee) = getMinterPayoff(expiry, anchorPrices, collateralAtRiskPercentage, amount);
         }
 
-        // burn product
-        _burn(_msgSender(), productId, amount);
-
         // check self balance of collateral and transfer payoff
         if (payoff > 0) {
             totalFee += fee;
         }
+
+        // burn product
+        _burn(_msgSender(), productId, amount);
         emit Burned(_msgSender(), productId, amount, payoff);
     }
 
