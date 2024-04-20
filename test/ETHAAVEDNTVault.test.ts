@@ -202,11 +202,13 @@ describe("ETHAAVEDNTVault", function () {
       const totalCollateral = parseEther("100");
       const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
-      const collateralAtRisk = parseEther("10");
+      let collateralAtRisk = parseEther("101");
       const makerCollateral = parseEther("10");
       const makerBalanceThreshold = parseEther("100000");
       const deadline = await time.latest() + 600;
       const balanceBefore = await minter.getBalance();
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid collateral");
+      collateralAtRisk = parseEther("10");
       const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
       const balanceAfter = await minter.getBalance();
       expect(balanceBefore.sub(balanceAfter)).to.above(parseEther("90"));

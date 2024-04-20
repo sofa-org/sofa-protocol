@@ -3,12 +3,15 @@
 pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "../interfaces/IUniswapV2Router.sol";
 import "../interfaces/IERC20Burnable.sol";
 
 contract FeeCollector is Ownable {
+    using SafeERC20 for IERC20;
+
     address immutable public rch;
     address immutable public routerV2;
     address immutable public routerV3;
@@ -28,7 +31,7 @@ contract FeeCollector is Ownable {
 
     function approve(IERC20 token, address router) external {
         require(router == routerV2 || router == routerV3, "Collector: invalid router");
-        require(token.approve(router, type(uint256).max), "Collector: approve failed");
+        token.safeApprove(router, type(uint256).max);
     }
 
     function swapRCH(

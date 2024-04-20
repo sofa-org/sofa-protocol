@@ -222,20 +222,22 @@ describe("LeverageSmartTrendVault", function () {
       const totalCollateral = parseEther("100");
       const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400 * 7;
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
-      const collateralAtRisk = parseEther("12");
+      let collateralAtRisk = parseEther("101");
       const makerCollateral = parseEther("10");
       const makerBalanceThreshold = parseEther("100000");
       await time.increaseTo(expiry - 86400 * 3);
       const deadline = await time.latest() + 600;
       let minterNonce = 0;
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid collateral");
+      collateralAtRisk = parseEther("12");
       const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
       minterNonce = 1;
       await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
       // Perform assertions
       const minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
       const makerProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 1]);
-      expect(await vault.balanceOf(minter.address, minterProductId)).to.equal(parseEther("99.999334741251148527"));
-      expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("99.999334741251148527"));
+      expect(await vault.balanceOf(minter.address, minterProductId)).to.equal(parseEther("99.999334743815845949"));
+      expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("99.999334743815845949"));
       expect(await collateral.balanceOf(vault.address)).to.equal(parseEther("100"));
       expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99990"));
       expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99910"));

@@ -102,6 +102,10 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             )
         );
         feeCollector = feeCollector_;
+
+        __Context_init();
+        __ERC1155_init("");
+        __ReentrancyGuard_init();
     }
 
     function mint(
@@ -323,14 +327,13 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             (payoff, fee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, amount);
         }
 
-        // burn product
-        _burn(_msgSender(), productId, amount);
-
         // check self balance of collateral and transfer payoff
         if (payoff > 0) {
             totalFee += fee;
         }
 
+        // burn product
+        _burn(_msgSender(), productId, amount);
         emit Burned(_msgSender(), productId, amount, payoff);
     }
 

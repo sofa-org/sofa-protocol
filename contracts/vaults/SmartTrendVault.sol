@@ -100,6 +100,10 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             )
         );
         feeCollector = feeCollector_;
+
+        __Context_init();
+        __ERC1155_init("");
+        __ReentrancyGuard_init();
     }
 
     function mint(
@@ -310,14 +314,13 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             (payoff, fee) = getMinterPayoff(expiry, anchorPrices, amount);
         }
 
-        // burn product
-        _burn(_msgSender(), productId, amount);
-
         // check self balance of collateral and transfer payoff
         if (payoff > 0) {
             totalFee += fee;
         }
 
+        // burn product
+        _burn(_msgSender(), productId, amount);
         emit Burned(_msgSender(), productId, amount, payoff);
     }
 
