@@ -339,8 +339,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         totalFee = 0;
         uint256 payoff = fee * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
         totalSupply -= fee * SHARE_MULTIPLIER;
-        require(POOL.withdraw(address(COLLATERAL), payoff, address(this)) > 0, "Vault: withdraw failed");
-        COLLATERAL.safeTransfer(feeCollector, payoff);
+        require(POOL.withdraw(address(COLLATERAL), payoff, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), payoff);
     }
