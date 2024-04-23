@@ -215,7 +215,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         totalSupply += aTokenShare;
 
         // trading fee
-        uint256 tradingFeeShare = IFeeCollector(feeCollector).tradingFeeRate() * aTokenShare * (params.collateralAtRisk - params.makerCollateral) / totalCollateral / 1e18;
+        uint256 tradingFeeShare = aTokenShare * tradingFee / totalCollateral;
         aTokenShare -= tradingFeeShare;
         totalFee += tradingFeeShare / SHARE_MULTIPLIER;
 
