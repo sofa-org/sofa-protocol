@@ -178,6 +178,11 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
 
+        // trading fee
+        uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
+        totalFee += tradingFee;
+        totalCollateral -= tradingFee;
+
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
@@ -240,6 +245,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
     function _mintBatch(uint256[] memory totalCollaterals, MintParams[] memory paramsArray, address referral) internal {
         require(referral != _msgSender(), "Vault: invalid referral");
         uint256[] memory productIds = new uint256[](paramsArray.length);
+        uint256 tradingFee;
         for (uint256 i = 0; i < paramsArray.length; i++) {
             uint256 totalCollateral = totalCollaterals[i];
             MintParams memory params = paramsArray[i];
@@ -272,6 +278,13 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             // transfer makercollateral
             COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
             }
+
+            // trading fee
+            uint256 fee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
+            tradingFee += fee;
+            totalCollateral -= fee;
+            totalCollaterals[i] = totalCollateral;
+
             // mint product
             productIds[i] = getProductId(params.expiry, params.anchorPrices, uint256(0));
             uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
@@ -279,6 +292,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
 
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
         }
+        totalFee += tradingFee;
         _mintBatch(_msgSender(), productIds, totalCollaterals, "");
     }
 
@@ -307,16 +321,14 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         require(ORACLE.settlePrices(expiry) > 0, "Vault: not settled");
 
         // calculate payoff by strategy
-        uint256 fee;
         if (isMaker == 1) {
-            (payoff, fee) = getMakerPayoff(expiry, anchorPrices, amount);
+            payoff = getMakerPayoff(expiry, anchorPrices, amount);
         } else {
-            (payoff, fee) = getMinterPayoff(expiry, anchorPrices, amount);
-        }
-
-        // check self balance of collateral and transfer payoff
-        if (payoff > 0) {
-            totalFee += fee;
+            uint256 settlementFee;
+            (payoff, settlementFee) = getMinterPayoff(expiry, anchorPrices, amount);
+            if (settlementFee > 0) {
+                totalFee += settlementFee;
+            }
         }
 
         // burn product
@@ -347,6 +359,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
+        uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             Product memory product = products[i];
             uint256 productId = getProductId(product.expiry, product.anchorPrices, product.isMaker);
@@ -356,19 +369,24 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             // check if settled
             require(ORACLE.settlePrices(product.expiry) > 0, "Vault: not settled");
             // calculate payoff by strategy
-            uint256 fee;
             if (product.isMaker == 1) {
-                (payoffs[i], fee) = getMakerPayoff(product.expiry, product.anchorPrices, amount);
+                payoffs[i] = getMakerPayoff(product.expiry, product.anchorPrices, amount);
             } else {
+                uint256 fee;
                 (payoffs[i], fee) = getMinterPayoff(product.expiry, product.anchorPrices, amount);
+                if (fee > 0) {
+                    settlementFee += fee;
+                }
             }
             if (payoffs[i] > 0) {
-                totalFee += fee;
                 totalPayoff += payoffs[i];
             }
 
             productIds[i] = productId;
             amounts[i] = amount;
+        }
+        if (settlementFee > 0) {
+            totalFee += settlementFee;
         }
         // burn product
         _burnBatch(_msgSender(), productIds, amounts);
@@ -385,15 +403,13 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         emit FeeCollected(_msgSender(), fee);
     }
 
-    function getMakerPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
-        uint256 payoffWithFee = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.settlePrices(expiry), amount);
-        fee = payoffWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
-        payoff = payoffWithFee - fee;
+    function getMakerPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff) {
+        payoff = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.settlePrices(expiry), amount);
     }
 
     function getMinterPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
         uint256 payoffWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.settlePrices(expiry), amount);
-        fee = payoffWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
+        fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoff = payoffWithFee - fee;
     }
 

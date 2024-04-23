@@ -179,6 +179,12 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         // transfer makercollateral
         COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
+
+        // trading fee
+        uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
+        totalFee += tradingFee;
+        totalCollateral -= tradingFee;
+
         // mint product
         // startDate = ((expiry-28800)/86400+1)*86400+28800
         uint256 term = (params.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
@@ -245,6 +251,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function _mintBatch(uint256[] memory totalCollaterals, MintParams[] memory paramsArray, address referral) internal {
         require(referral != _msgSender(), "Vault: invalid referral");
         uint256[] memory productIds = new uint256[](paramsArray.length);
+        uint256 tradingFee;
         for (uint256 i = 0; i < paramsArray.length; i++) {
             uint256 totalCollateral = totalCollaterals[i];
             MintParams memory params = paramsArray[i];
@@ -277,6 +284,13 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             // transfer makercollateral
             COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
             }
+
+            // trading fee
+            uint256 fee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
+            tradingFee += fee;
+            totalCollateral -= fee;
+            totalCollaterals[i] = totalCollateral;
+
             // mint product
             // startDate = ((expiry-28800)/86400+1)*86400+28800
             uint256 term = (params.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
@@ -288,6 +302,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             }
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral);
         }
+        totalFee += tradingFee;
         _mintBatch(_msgSender(), productIds, totalCollaterals, "");
     }
 
@@ -320,16 +335,14 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         require(amount > 0, "Vault: zero amount");
 
         // calculate payoff by strategy
-        uint256 fee;
         if (isMaker == 1) {
-            (payoff, fee) = getMakerPayoff(latestTerm, latestExpiry, anchorPrices, amount);
+            payoff = getMakerPayoff(latestTerm, latestExpiry, anchorPrices, amount);
         } else {
-            (payoff, fee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, amount);
-        }
-
-        // check self balance of collateral and transfer payoff
-        if (payoff > 0) {
-            totalFee += fee;
+            uint256 settlementFee;
+            (payoff, settlementFee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, amount);
+            if (settlementFee > 0) {
+                totalFee += settlementFee;
+            }
         }
 
         // burn product
@@ -360,6 +373,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
+        uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             // check if settled
             uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
@@ -375,19 +389,24 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             require(amount > 0, "Vault: zero amount");
 
             // calculate payoff by strategy
-            uint256 fee;
             if (product.isMaker == 1) {
-                (payoffs[i], fee) = getMakerPayoff(latestTerm, latestExpiry, product.anchorPrices, amount);
+                payoffs[i] = getMakerPayoff(latestTerm, latestExpiry, product.anchorPrices, amount);
             } else {
+                uint256 fee;
                 (payoffs[i], fee) = getMinterPayoff(latestTerm, latestExpiry, product.anchorPrices, amount);
+                if (fee > 0) {
+                    settlementFee += fee;
+                }
             }
             if (payoffs[i] > 0) {
-                totalFee += fee;
                 totalPayoff += payoffs[i];
             }
 
             productIds[i] = productId;
             amounts[i] = amount;
+        }
+        if (settlementFee > 0) {
+            totalFee += settlementFee;
         }
         // burn product
         _burnBatch(_msgSender(), productIds, amounts);
@@ -404,15 +423,13 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         emit FeeCollected(_msgSender(), fee);
     }
 
-    function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
-        uint256 payoffWithFee = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), amount);
-        fee = payoffWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
-        payoff = payoffWithFee - fee;
+    function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff) {
+        payoff = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), amount);
     }
 
     function getMinterPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
         uint256 payoffWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), amount);
-        fee = payoffWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
+        fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoff = payoffWithFee - fee;
     }
 

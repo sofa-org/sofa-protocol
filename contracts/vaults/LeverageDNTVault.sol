@@ -202,15 +202,15 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         // (totalCollateral - makerCollateral) = minterCollateral + minterCollateral * LEVERAGE_RATIO * depositAPR / SECONDS_IN_YEAR * (expiry - block.timestamp)
         uint256 minterCollateral = (totalCollateral - params.makerCollateral) * 1e18 / (1e18 + LEVERAGE_RATIO * depositAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
         // share = (10x + makerCollateral) * (1 + depositAPR / SECONDS_IN_YEAR * LEVERAGE_RATIO / 10) - fee
-        uint256 fee = minterCollateral * LEVERAGE_RATIO * depositAPR * (params.expiry - block.timestamp) * IFeeCollector(feeCollector).feeRate() / SECONDS_IN_YEAR / 1e18 / 1e18;
-        totalFee += fee;
-        uint256 share = totalCollateral - fee;
-        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / share;
+        uint256 tradingFee = minterCollateral * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
+        totalFee += tradingFee;
+        totalCollateral -= tradingFee;
+        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
 
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
-        _mint(_msgSender(), productId, share, "");
-        _mint(params.maker, makerProductId, share, "");
+        _mint(_msgSender(), productId, totalCollateral, "");
+        _mint(params.maker, makerProductId, totalCollateral, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral, collateralAtRiskPercentage);
@@ -244,16 +244,14 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         require(amount > 0, "Vault: zero amount");
 
         // calculate payoff by strategy
-        uint256 fee;
         if (isMaker == 1) {
-            (payoff, fee) = getMakerPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
+            payoff = getMakerPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
         } else {
-            (payoff, fee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
-        }
-
-        // check self balance of collateral and transfer payoff
-        if (payoff > 0) {
-            totalFee += fee;
+            uint256 settlementFee;
+            (payoff, settlementFee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
+            if (settlementFee > 0) {
+                totalFee += settlementFee;
+            }
         }
 
         // burn product
@@ -282,6 +280,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
+        uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             // check if settled
             uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
@@ -296,19 +295,24 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
             require(amount > 0, "Vault: zero amount");
 
             // calculate payoff by strategy
-            uint256 fee;
             if (product.isMaker == 1) {
-                (payoffs[i], fee) = getMakerPayoff(latestTerm, latestExpiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
+                payoffs[i] = getMakerPayoff(latestTerm, latestExpiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
             } else {
+                uint256 fee;
                 (payoffs[i], fee) = getMinterPayoff(latestTerm, latestExpiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
+                if (fee > 0) {
+                    settlementFee += fee;
+                }
             }
             if (payoffs[i] > 0) {
-                totalFee += fee;
                 totalPayoff += payoffs[i];
             }
 
             productIds[i] = productId;
             amounts[i] = amount;
+        }
+        if (settlementFee > 0) {
+            totalFee += settlementFee;
         }
         // burn product
         _burnBatch(_msgSender(), productIds, amounts);
@@ -331,17 +335,15 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         emit APRUpdated(depositAPR_);
     }
 
-    function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
+    function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        uint256 payoffWithFee = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
-        fee = payoffWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
-        payoff = payoffWithFee - fee;
+        payoff = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
     }
 
     function getMinterPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
         uint256 payoffWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
-        fee = payoffWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
+        fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoff = payoffWithFee - fee + (amount - amount * collateralAtRiskPercentage / 1e18);
     }
 
