@@ -164,6 +164,7 @@ describe("FeeCollector", function () {
     const feeCollector = await FeeCollector.deploy(
       rch.address,
       parseEther("0.01"), // Mock fee rate 1%
+      parseEther("0.01"), // Mock fee rate 1%
       UNI_ROUTERV2_ADDR,
       UNI_ROUTERV3_ADDR
     );
@@ -324,9 +325,9 @@ describe("FeeCollector", function () {
     await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address, rch.address])).to.be.reverted;
     await feeCollector.approve(collateral.address, uniRouterV2.address);
     await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address])).to.be.revertedWith("Collector: invalid path");
-    await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address, rch.address])).to.changeTokenBalance(rch, feeCollector, parseEther("0.993811131309326294"));
+    await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address, rch.address])).to.changeTokenBalance(rch, feeCollector, parseEther("0.894447823170063419"));
     expect(await collateral.balanceOf(feeCollector.address)).to.equal(parseEther("0"));
-    await expect(feeCollector.burnRCH()).to.changeTokenBalance(rch, feeCollector, parseEther("-0.993811131309326294"));
+    await expect(feeCollector.burnRCH()).to.changeTokenBalance(rch, feeCollector, parseEther("-0.894447823170063419"));
   });
 
   it("should burn utility token in uniV3", async function () {
@@ -365,16 +366,19 @@ describe("FeeCollector", function () {
     await expect(feeCollector["swapRCH(address,uint256,bytes)"](collateral.address, 0, path)).to.be.revertedWith("Collector: invalid path");
     tokens = [collateral.address, weth.address, rch.address];
     path = encodePath(tokens, new Array(tokens.length - 1).fill(FeeAmount.MEDIUM));
-    await expect(feeCollector["swapRCH(address,uint256,bytes)"](collateral.address, 0, path)).to.changeTokenBalance(rch, feeCollector, parseEther("0.993811131309326293"));
+    await expect(feeCollector["swapRCH(address,uint256,bytes)"](collateral.address, 0, path)).to.changeTokenBalance(rch, feeCollector, parseEther("0.894447823170063418"));
     expect(await collateral.balanceOf(feeCollector.address)).to.equal(parseEther("0"));
-    await expect(feeCollector.burnRCH()).to.changeTokenBalance(rch, feeCollector, parseEther("-0.993811131309326293"));
+    await expect(feeCollector.burnRCH()).to.changeTokenBalance(rch, feeCollector, parseEther("-0.894447823170063418"));
   });
 
   it("should set fee rate", async function () {
     const { feeCollector, minter } = await loadFixture(deployFixture);
 
-    await expect(feeCollector.connect(minter).setFeeRate(parseEther("0.01"))).to.be.revertedWith("Ownable: caller is not the owner");
-    await feeCollector.setFeeRate(parseEther("0.1"));
-    expect(await feeCollector.feeRate()).to.equal(parseEther("0.1"));
+    await expect(feeCollector.connect(minter).setTradingFeeRate(parseEther("0.01"))).to.be.revertedWith("Ownable: caller is not the owner");
+    await feeCollector.setTradingFeeRate(parseEther("0.1"));
+    expect(await feeCollector.tradingFeeRate()).to.equal(parseEther("0.1"));
+    await expect(feeCollector.connect(minter).setSettlementFeeRate(parseEther("0.01"))).to.be.revertedWith("Ownable: caller is not the owner");
+    await feeCollector.setSettlementFeeRate(parseEther("0.1"));
+    expect(await feeCollector.settlementFeeRate()).to.equal(parseEther("0.1"));
   });
 });

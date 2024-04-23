@@ -176,7 +176,6 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         require(params.collateralAtRisk <= totalCollateral, "Vault: invalid collateral");
         require(referral != _msgSender(), "Vault: invalid referral");
 
-
         {
         // verify maker's signature
         bytes32 digest =
@@ -202,7 +201,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         }
         // calculate atoken shares
         uint256 term;
-        uint256 collateralAtRiskPercentage;
+        uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (params.collateralAtRisk - params.makerCollateral) / 1e18;
+        uint256 collateralAtRiskPercentage = (params.collateralAtRisk - tradingFee) * 1e18 / (totalCollateral - tradingFee);
         {
         uint256 aTokenShare;
         POOL.supply(address(COLLATERAL), totalCollateral, address(this), REFERRAL_CODE);
@@ -213,6 +213,11 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
             aTokenShare = totalCollateral * SHARE_MULTIPLIER;
         }
         totalSupply += aTokenShare;
+
+        // trading fee
+        uint256 tradingFeeShare = IFeeCollector(feeCollector).tradingFeeRate() * aTokenShare * (params.collateralAtRisk - params.makerCollateral) / totalCollateral / 1e18;
+        aTokenShare -= tradingFeeShare;
+        totalFee += tradingFeeShare / SHARE_MULTIPLIER;
 
         // mint product
         // startDate = ((expiry-28800)/86400+1)*86400+28800
@@ -258,16 +263,18 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
         // calculate payoff by strategy
         uint256 payoffShare;
-        uint256 fee;
         if (isMaker == 1) {
-            (payoffShare, fee) = getMakerPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
+            payoffShare = getMakerPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
         } else {
-            (payoffShare, fee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
+            uint256 settlementFee;
+            (payoffShare, settlementFee) = getMinterPayoff(latestTerm, latestExpiry, anchorPrices, collateralAtRiskPercentage, amount);
+            if (settlementFee > 0) {
+                totalFee += settlementFee;
+            }
         }
 
         // check self balance of collateral and transfer payoff
         if (payoffShare > 0) {
-            totalFee += fee;
             payoff = payoffShare * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
             totalSupply -= payoffShare * SHARE_MULTIPLIER;
             emit Burned(_msgSender(), productId, amount, payoff);
@@ -301,6 +308,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
         uint256 aTokenBalance = ATOKEN.balanceOf(address(this));
+        uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             // check if settled
             uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
@@ -316,14 +324,16 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
             // calculate payoff by strategy
             uint256 payoffShare;
-            uint256 fee;
             if (product.isMaker == 1) {
-                (payoffShare, fee) = getMakerPayoff(latestTerm, latestExpiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
+                payoffShare = getMakerPayoff(latestTerm, latestExpiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
             } else {
+                uint256 fee;
                 (payoffShare, fee) = getMinterPayoff(latestTerm, latestExpiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
+                if (fee > 0) {
+                    settlementFee += fee;
+                }
             }
             if (payoffShare > 0) {
-                totalFee += fee;
                 totalPayoffShare += payoffShare;
             }
 
@@ -331,7 +341,9 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
             amounts[i] = amount;
             payoffs[i] = payoffShare * aTokenBalance * SHARE_MULTIPLIER / totalSupply;
         }
-
+        if (settlementFee > 0) {
+            totalFee += settlementFee;
+        }
         // check self balance of collateral and transfer payoff
         if (totalPayoffShare > 0) {
             totalPayoff = totalPayoffShare * aTokenBalance * SHARE_MULTIPLIER / totalSupply;
@@ -350,23 +362,20 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         totalFee = 0;
         uint256 payoff = fee * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
         totalSupply -= fee * SHARE_MULTIPLIER;
-        require(POOL.withdraw(address(COLLATERAL), payoff, address(this)) > 0, "Vault: withdraw failed");
-        COLLATERAL.safeTransfer(feeCollector, payoff);
+        require(POOL.withdraw(address(COLLATERAL), payoff, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), payoff);
     }
 
-    function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare, uint256 fee) {
+    function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        uint256 payoffShareWithFee = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
-        fee = payoffShareWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
-        payoffShare = payoffShareWithFee - fee;
+        payoffShare = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
     }
 
     function getMinterPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare, uint256 fee) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
         uint256 payoffShareWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
-        fee = payoffShareWithFee * IFeeCollector(feeCollector).feeRate() / 1e18;
+        fee = payoffShareWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoffShare = payoffShareWithFee - fee + (amount * 1e18 - amount * collateralAtRiskPercentage) / 1e18;
     }
 

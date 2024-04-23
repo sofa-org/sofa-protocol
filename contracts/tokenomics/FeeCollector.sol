@@ -15,16 +15,19 @@ contract FeeCollector is Ownable {
     address immutable public rch;
     address immutable public routerV2;
     address immutable public routerV3;
-    uint256 public feeRate;
+    uint256 public tradingFeeRate;
+    uint256 public settlementFeeRate;
 
     constructor(
         address rch_,
-        uint256 feeRate_,
+        uint256 tradingFeeRate_,
+        uint256 settlementFeeRate_,
         address routerV2_,
         address routerV3_
     ) {
         rch = rch_;
-        feeRate = feeRate_;
+        tradingFeeRate = tradingFeeRate_;
+        settlementFeeRate = settlementFeeRate_;
         routerV2 = routerV2_;
         routerV3 = routerV3_;
     }
@@ -78,7 +81,10 @@ contract FeeCollector is Ownable {
     }
 
     // set feeRate
-    function setFeeRate(uint256 feeRate_) external onlyOwner {
-        feeRate = feeRate_;
+    function setTradingFeeRate(uint256 tradingFeeRate_) external onlyOwner {
+        tradingFeeRate = tradingFeeRate_;
+    }
+    function setSettlementFeeRate(uint256 settlementFeeRate_) external onlyOwner {
+        settlementFeeRate = settlementFeeRate_;
     }
 }
