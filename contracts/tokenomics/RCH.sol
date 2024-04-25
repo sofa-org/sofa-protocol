@@ -8,8 +8,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IERC20Mintable.sol";
 
 contract RCH is ERC20Burnable, ERC20Permit, IERC20Mintable, Ownable {
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-
     uint256 public constant MAX_SUPPLY = 37000000 ether;
     uint256 public immutable tradingStartTime;
     uint256 public totalMinted;

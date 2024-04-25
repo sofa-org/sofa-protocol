@@ -8,7 +8,7 @@ import "../interfaces/IERC20Mintable.sol";
 
 contract MerkleAirdrop is Ownable {
     IERC20Mintable immutable token;
-    mapping(uint256 => bytes32) public merkleRoots; // 每日一个 Merkle 根
+    mapping(uint256 => bytes32) public merkleRoots;
     mapping(address => mapping(uint256 => uint256)) public claimedBitMap;
 
     event Claimed(uint256 index, address account, uint256 amount);
@@ -59,7 +59,6 @@ contract MerkleAirdrop is Ownable {
     ) external {
         require(indexes.length == amounts.length && indexes.length == merkleProofs.length, "Airdrop: Parameters length mismatch.");
 
-        // 总领取的空投数量
         uint256 totalAmount = 0;
 
         for (uint256 i = 0; i < indexes.length; i++) {
@@ -84,7 +83,6 @@ contract MerkleAirdrop is Ownable {
             emit Claimed(index, _msgSender(), amount);
         }
 
-        // 转移总代币
         token.mint(_msgSender(), totalAmount);
     }
 
