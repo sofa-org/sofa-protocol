@@ -9,6 +9,7 @@ import {
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import bn from 'bignumber.js';
 const { parseEther, keccak256, solidityKeccak256, solidityPack, toUtf8Bytes } = ethers.utils;
+import { mint } from "../helpers/helpers";
 
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 })
 
@@ -217,81 +218,6 @@ describe("FeeCollector", function () {
 
     return nft.mint(liquidityParams)
   }
-
-
-  async function mint(
-    totalCollateral: string,
-    expiry: number,
-    anchorPrices: Array<string>,
-    makerCollateral: string,
-    makerBalanceThreshold: string,
-    deadline: number,
-    minterNonce: number,
-    collateral: any,
-    vault: any,
-    minter: any,
-    maker: any,
-    referral: any,
-    eip721Domain: any
-  ) {
-    // console.log(keccak256(toUtf8Bytes("Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256 strikePrice,uint256 makerCollateral,uint256 deadline,uint256 nonce,address vault)")));
-    // Test variables
-    const minterPermit: PermitTransferFrom = {
-      permitted: {
-        token: collateral.address,
-        amount: (totalCollateral - makerCollateral).toString()
-      },
-      spender: vault.address,
-      nonce: minterNonce,
-      deadline: deadline
-    };
-    const { domain, types, values } = SignatureTransfer.getPermitData(minterPermit, PERMIT2_ADDRESS, eip721Domain.chainId);
-    const minterPermitSignature = await minter._signTypedData(domain, types, values);
-
-    const makerSignatureTypes = { Mint: [
-      { name: 'minter', type: 'address' },
-      { name: 'totalCollateral', type: 'uint256' },
-      { name: 'expiry', type: 'uint256' },
-      { name: 'anchorPrices', type: 'uint256[2]' },
-      { name: 'makerCollateral', type: 'uint256' },
-      { name: 'makerBalanceThreshold', type: 'uint256' },
-      { name: 'deadline', type: 'uint256' },
-      { name: 'vault', type: 'address' },
-    ] };
-    const makerSignatureValues = {
-      minter: minter.address,
-      totalCollateral: totalCollateral,
-      expiry: expiry,
-      anchorPrices: anchorPrices,
-      makerCollateral: makerCollateral,
-      makerBalanceThreshold: makerBalanceThreshold,
-      deadline: deadline,
-      vault: vault.address,
-    };
-    const makerSignature = await maker._signTypedData(eip721Domain, makerSignatureTypes, makerSignatureValues);
-
-    // Call mint function
-    await vault
-        .connect(minter)
-        ["mint(uint256,(uint256,uint256[2],uint256,uint256,uint256,address,bytes),bytes,uint256,address)"](
-          totalCollateral,
-          {
-            expiry: expiry,
-            anchorPrices: anchorPrices,
-            makerCollateral: makerCollateral,
-            makerBalanceThreshold: makerBalanceThreshold,
-            deadline: deadline,
-            maker: maker.address,
-            makerSignature: makerSignature
-          },
-          minterPermitSignature,
-          minterNonce,
-          referral.address
-        );
-
-    return { vault, collateral, maker, minter };
-  }
-
 
   it("should burn utility token", async function () {
     const { vault, feeCollector, collateral, weth, rch, aggregator, oracle, minter, maker, referral, eip721Domain, uniRouterV2 } = await loadFixture(deployFixture);

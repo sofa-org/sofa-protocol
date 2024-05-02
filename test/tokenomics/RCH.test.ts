@@ -76,7 +76,7 @@ describe("RCH", function () {
     const { rch, owner } = await loadFixture(deployFixture);
     await rch.connect(owner).mint(owner.address, parseEther("36800000"));
     expect(await rch.balanceOf(owner.address)).to.equal(parseEther("36890000"));
-    expect(await rch.burn(parseEther("10000"))).to.changeTokenBalance(rch, owner, parseEther("10000"));
+    await expect(rch.burn(parseEther("10000"))).to.changeTokenBalance(rch, owner, parseEther("-10000"));
     await expect(rch.connect(owner).mint(owner.address, parseEther("10000"))).to.be.revertedWith("RCH: cap exceeded");
   });
 });
