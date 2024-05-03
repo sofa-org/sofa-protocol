@@ -57,13 +57,12 @@ describe("ETHSmartTrendVault", function () {
       const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
-      const makerBalanceThreshold = parseEther("100000");
       const deadline = await time.latest() + 600;
       const balanceBefore = await ethers.provider.getBalance(minter.address);
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
       const balanceAfter = await ethers.provider.getBalance(minter.address);
       expect(balanceBefore.sub(balanceAfter)).to.above(parseEther("90"));
-      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
+      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
       // Perform assertions
       const minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256"], [expiry, anchorPrices, 0]);
       const makerProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256"], [expiry, anchorPrices, 1]);
@@ -84,13 +83,12 @@ describe("ETHSmartTrendVault", function () {
       const deadline = await time.latest() + 600;
       const balanceBefore = await ethers.provider.getBalance(minter.address);
       await expect(mintBatch([
-        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("100000"), deadline: deadline, maker: maker },
-        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("100000"), deadline: deadline, maker: maker }
-      ], vault, minter, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
-
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker },
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker }
+      ], vault, minter, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
       await mintBatch([
-        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("100000"), deadline: deadline, maker: maker },
-        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, makerBalanceThreshold: parseEther("99990"), deadline: deadline, maker: maker }
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker },
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline + 1, maker: maker }
       ], vault, minter, referral, eip721Domain);
       const balanceAfter = await ethers.provider.getBalance(minter.address);
       expect(balanceBefore.sub(balanceAfter)).to.above(parseEther("180"));
@@ -110,10 +108,9 @@ describe("ETHSmartTrendVault", function () {
       let expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
-      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
 
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256"], [expiry, anchorPrices, 0]);
@@ -138,8 +135,7 @@ describe("ETHSmartTrendVault", function () {
 
       // strike case
       anchorPrices = [parseEther("27000"), parseEther("33000")];
-      makerBalanceThreshold = parseEther("99990");
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
       await time.increaseTo(expiry);
       await aggregator.setLatestAnswer(parseEther("32000"));
       await oracle.settle();
@@ -170,13 +166,11 @@ describe("ETHSmartTrendVault", function () {
       let anchorPricesA = [parseEther("28000"), parseEther("30000")];
       let anchorPricesB = [parseEther("27000"), parseEther("33000")];
       const makerCollateral = parseEther("10");
-      let makerBalanceThreshold = parseEther("100000");
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain);
-      makerBalanceThreshold = parseEther("99990")
-      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, makerBalanceThreshold, deadline, collateral, vault, minter, maker, referral, eip721Domain)
+      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain)
 
       await time.increaseTo(expiry);
       await aggregator.setLatestAnswer(parseEther("32000"));

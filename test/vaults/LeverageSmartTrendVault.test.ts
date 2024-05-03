@@ -59,15 +59,14 @@ describe("LeverageSmartTrendVault", function () {
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
       let collateralAtRisk = parseEther("101");
       const makerCollateral = parseEther("10");
-      const makerBalanceThreshold = parseEther("100000");
       await time.increaseTo(expiry - 86400 * 3);
       const deadline = await time.latest() + 600;
       let minterNonce = 0;
-      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid collateral");
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid collateral");
       collateralAtRisk = parseEther("12");
-      const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
       minterNonce = 1;
-      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid balance threshold");
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
       // Perform assertions
       const minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
       const makerProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 1]);
@@ -86,12 +85,11 @@ describe("LeverageSmartTrendVault", function () {
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       let collateralAtRisk = parseEther("12");
       const makerCollateral = parseEther("10");
-      let makerBalanceThreshold = parseEther("100000");
       await time.increaseTo(expiry - 86400 * 3);
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      let { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      let { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
@@ -113,13 +111,12 @@ describe("LeverageSmartTrendVault", function () {
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400 * 7;
       await time.increaseTo(expiry - 86400 * 3);
       deadline = await time.latest() + 600;
-      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.reverted;
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.reverted;
 
       // strike case
       minterNonce = 1;
       anchorPrices = [parseEther("27000"), parseEther("33000")];
-      makerBalanceThreshold = parseEther("99990");
-      ({ collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain));
+      ({ collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain));
       await time.increaseTo(expiry);
       await oracle.settle();
       minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
@@ -147,16 +144,14 @@ describe("LeverageSmartTrendVault", function () {
       let anchorPricesB = [parseEther("27000"), parseEther("33000")];
       let collateralAtRisk = parseEther("12");
       const makerCollateral = parseEther("10");
-      let makerBalanceThreshold = parseEther("100000");
       await time.increaseTo(expiry - 86400 * 3);
       let deadline = await time.latest() + 600;
       let minterNonce = 0;
 
-      let { collateralAtRiskPercentage: collateralAtRiskPercentageA } = await mint(totalCollateral, expiry, anchorPricesA, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      let { collateralAtRiskPercentage: collateralAtRiskPercentageA } = await mint(totalCollateral, expiry, anchorPricesA, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       minterNonce = 1;
-      makerBalanceThreshold = parseEther("99990");
-      let { collateralAtRiskPercentage: collateralAtRiskPercentageB } = await mint(totalCollateral, expiry, anchorPricesB, collateralAtRisk, makerCollateral, makerBalanceThreshold, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      let { collateralAtRiskPercentage: collateralAtRiskPercentageB } = await mint(totalCollateral, expiry, anchorPricesB, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
 
       await time.increaseTo(expiry);
       await oracle.settle();

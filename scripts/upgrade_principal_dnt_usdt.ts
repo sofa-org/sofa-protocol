@@ -21,31 +21,27 @@ async function main() {
 
   // We get the contract to deploy
   const gas = await ethers.provider.getGasPrice();
-  const Vault = await ethers.getContractFactory("PrincipalDNTVault", {
-    libraries: {
-      SignatureDecoding: process.env.SIGNATURE_DECODING_ADDRESS,
-    }
-  });
+  const Vault = await ethers.getContractFactory("AAVEDNTVault");
   const vault = await upgrades.upgradeProxy(process.env.USDT_PRINCIPAL_DNT_VAULT_ADDRESS, Vault, {
     gasPrice: gas,
-    unsafeAllowLinkedLibraries: true,
+    //unsafeAllowLinkedLibraries: true,
     //unsafeAllow: ["external-library-linking"],
-    call: {
-      fn: 'initialize',
-      args: [
-        "Sofa USDT",
-        "sfUSDT",
-        PERMIT2_ADDRESS,
-        process.env.DNT_ADDRESS,
-        process.env.WETH_ADDRESS,
-        process.env.USDT_ADDRESS,
-        process.env.RCH_ADDRESS,
-        process.env.UNI_ROUTERV2_ADDRESS,
-        process.env.ETH_AUTO_FUNC_CONS_ADDRESS,
-        process.env.AAVE_POOL_ADDRESS,
-        ethers.utils.parseEther("0.01"),
-      ],
-    },
+    // call: {
+    //   fn: 'initialize',
+    //   args: [
+    //     "Sofa USDT",
+    //     "sfUSDT",
+    //     PERMIT2_ADDRESS,
+    //     process.env.DNT_ADDRESS,
+    //     process.env.WETH_ADDRESS,
+    //     process.env.USDT_ADDRESS,
+    //     process.env.RCH_ADDRESS,
+    //     process.env.UNI_ROUTERV2_ADDRESS,
+    //     process.env.ETH_AUTO_FUNC_CONS_ADDRESS,
+    //     process.env.AAVE_POOL_ADDRESS,
+    //     ethers.utils.parseEther("0.01"),
+    //   ],
+    // },
   });
 }
 
