@@ -15,8 +15,9 @@ import "../interfaces/IDNTStrategy.sol";
 import "../interfaces/IHlOracle.sol";
 import "../interfaces/IFeeCollector.sol";
 import "../libs/SignatureDecoding.sol";
+import "../utils/SignatureBitMap.sol";
 
-contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable {
+contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
     using SignatureDecoding for bytes;
 
@@ -30,7 +31,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         uint256 expiry;
         uint256[2] anchorPrices;
         uint256 makerCollateral;
-        uint256 makerBalanceThreshold;
         uint256 deadline;
         address maker;
         bytes makerSignature;
@@ -42,9 +42,9 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     // );
     bytes32 public constant EIP712DOMAIN_TYPEHASH = 0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
     // bytes32 public constant MINT_TYPEHASH = keccak256(
-    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 makerCollateral,uint256 makerBalanceThreshold,uint256 deadline,address vault)"
+    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 makerCollateral,uint256 deadline,address vault)"
     // );
-    bytes32 public constant MINT_TYPEHASH = 0xe40d8ddd167626853ea4f67c19938e934054678d32ce5c5a449fa8230d8d5807;
+    bytes32 public constant MINT_TYPEHASH = 0xe8015bbde99f68dcef36fec6eec1f414ef04b9f79422109663be9c2c47e3dc30;
 
     string public name;
     string public symbol;
@@ -154,7 +154,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
-        require(params.makerBalanceThreshold <= COLLATERAL.balanceOf(params.maker), "Vault: invalid balance threshold");
+        require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
         require(referral != _msgSender(), "Vault: invalid referral");
 
         {
@@ -169,12 +169,12 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
                                      params.expiry,
                                      keccak256(abi.encodePacked(params.anchorPrices)),
                                      params.makerCollateral,
-                                     params.makerBalanceThreshold,
                                      params.deadline,
                                      address(this)))
         ));
         (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
         require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+        consumeSignature(params.makerSignature);
 
         // transfer makercollateral
         COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
@@ -260,7 +260,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             // require expiry must be 8:00 UTC
             require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
             require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
-            require(params.makerBalanceThreshold <= COLLATERAL.balanceOf(params.maker), "Vault: invalid balance threshold");
+            require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
 
             {
             // verify maker's signature
@@ -274,12 +274,12 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
                                                                 params.expiry,
                                                                 keccak256(abi.encodePacked(params.anchorPrices)),
                                                                 params.makerCollateral,
-                                                                params.makerBalanceThreshold,
                                                                 params.deadline,
                                                                 address(this)))
                           ));
             (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
             require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+            consumeSignature(params.makerSignature);
 
             // transfer makercollateral
             COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);

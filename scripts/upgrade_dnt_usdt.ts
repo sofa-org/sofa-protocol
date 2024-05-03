@@ -21,11 +21,7 @@ async function main() {
 
   // We get the contract to deploy
   const gas = await ethers.provider.getGasPrice();
-  const Vault = await ethers.getContractFactory("DNTVault", {
-    libraries: {
-      SignatureDecoding: process.env.SIGNATURE_DECODING_ADDRESS,
-    }
-  });
+  const Vault = await ethers.getContractFactory("DNTVault");
   const vault = await upgrades.upgradeProxy(process.env.USDT_DNT_VAULT_ADDRESS, Vault, {
     gasPrice: gas,
     unsafeAllowLinkedLibraries: true,
