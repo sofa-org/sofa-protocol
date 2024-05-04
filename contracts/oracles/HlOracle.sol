@@ -62,13 +62,13 @@ contract HlOracle is AutomationCompatibleInterface {
         hlPrices = [type(uint256).max, 0];
         if (term > 0) {
             for (uint256 i = 0; i < term; i++) {
-                expiry = expiry - i * 86400;
                 if (settlePrices[expiry][0] > 0 && settlePrices[expiry][0] < hlPrices[0]) {
                     hlPrices[0] = settlePrices[expiry][0];
                 }
                 if (settlePrices[expiry][1] > 0 && settlePrices[expiry][1] > hlPrices[1]) {
                     hlPrices[1] = settlePrices[expiry][1];
                 }
+                expiry = expiry - 86400;
             }
         }
     }

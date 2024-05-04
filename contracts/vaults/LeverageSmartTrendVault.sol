@@ -48,6 +48,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     // );
     bytes32 public constant MINT_TYPEHASH = 0xbbb96bd81b8359e3021ab4bd0188b2fb99443a6debe51f7cb0a925a398f17117;
     uint256 public constant LEVERAGE_RATIO = 9; // 9x
+    uint256 internal constant APR_BASE = 1e18;
     uint256 internal constant SECONDS_IN_YEAR = 365 days;
 
     string public name;
@@ -59,7 +60,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     IERC20Metadata public COLLATERAL;
     ISpotOracle public ORACLE;
 
-    uint256 public depositAPR;
+    uint256 public borrowAPR;
+    uint256 public spreadAPR;
     uint256 public totalFee;
     address public feeCollector;
 
@@ -68,7 +70,6 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     event Burned(address burner, uint256 productId, uint256 amount, uint256 payoff);
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] payoffs);
     event FeeCollected(address collector, uint256 amount);
-    event APRUpdated(uint256 apr);
 
     modifier onlyETHVault() {
         require(address(COLLATERAL) == address(WETH), "Vault: only ETH vault");
@@ -85,7 +86,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         address weth_,
         address collateral_,
         address feeCollector_,
-        uint256 depositAPR_,
+        uint256 borrowAPR_,
+        uint256 spreadAPR_,
         ISpotOracle oracle_
     ) initializer external {
         name = name_;
@@ -108,7 +110,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
             )
         );
         feeCollector = feeCollector_;
-        depositAPR = depositAPR_;
+        borrowAPR = borrowAPR_;
+        spreadAPR = spreadAPR_;
 
         __Context_init();
         __ERC1155_init("");
@@ -193,13 +196,15 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
 
         uint256 collateralAtRiskPercentage;
         {
-        // (totalCollateral - makerCollateral) = minterCollateral + minterCollateral * LEVERAGE_RATIO * depositAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
-        uint256 minterCollateral = (totalCollateral - params.makerCollateral) * 1e18 / (1e18 + LEVERAGE_RATIO * depositAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
-        // share = (10x + makerCollateral) * (1 + depositAPR / SECONDS_IN_YEAR * LEVERAGE_RATIO / 10) - fee
-        uint256 tradingFee = minterCollateral * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
-        totalFee += tradingFee;
-        totalCollateral -= tradingFee;
-        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
+        // (totalCollateral - makerCollateral) = minterCollateral * (1 + LEVERAGE_RATIO) + minterCollateral * LEVERAGE_RATIO * borrowAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
+        uint256 minterCollateral = (totalCollateral - params.makerCollateral) * APR_BASE / (APR_BASE + LEVERAGE_RATIO * APR_BASE + LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
+        uint256 borrowFee = minterCollateral * LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
+        uint256 spreadFee = minterCollateral * LEVERAGE_RATIO * spreadAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
+        require(borrowFee - spreadFee >= params.collateralAtRisk - params.makerCollateral, "Vault: invalid collateral at risk");
+        uint256 tradingFee = (params.collateralAtRisk - params.makerCollateral) * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
+        totalFee = totalFee + spreadFee + tradingFee;
+        totalCollateral = totalCollateral - tradingFee - spreadFee;
+        collateralAtRiskPercentage = (params.collateralAtRisk - tradingFee) * 1e18 / totalCollateral;
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
@@ -314,10 +319,14 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         emit FeeCollected(_msgSender(), fee);
     }
 
-    // update depositAPR
-    function updateDepositAPR(uint256 depositAPR_) external onlyOwner {
-        depositAPR = depositAPR_;
-        emit APRUpdated(depositAPR_);
+    // update borrowAPR
+    function updateBorrowAPR(uint256 borrowAPR_) external onlyOwner {
+        borrowAPR = borrowAPR_;
+    }
+
+    // update spreadAPR
+    function updateSpreadAPR(uint256 spreadAPR_) external onlyOwner {
+        spreadAPR = spreadAPR_;
     }
 
     function getMakerPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff) {
