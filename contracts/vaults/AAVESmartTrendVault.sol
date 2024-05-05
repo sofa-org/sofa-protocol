@@ -201,7 +201,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
 
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (params.collateralAtRisk - params.makerCollateral) / 1e18;
-        uint256 collateralAtRiskPercentage = (params.collateralAtRisk - tradingFee) * 1e18 / (totalCollateral - tradingFee);
+        uint256 collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee);
         // calculate atoken shares
         {
         uint256 aTokenShare;
@@ -236,7 +236,6 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
            require(POOL.withdraw(address(COLLATERAL), payoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
-
     function ethBurn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {

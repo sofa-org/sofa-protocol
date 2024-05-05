@@ -204,7 +204,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 tradingFee = (params.collateralAtRisk - params.makerCollateral) * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
         totalFee = totalFee + spreadFee + tradingFee;
         totalCollateral = totalCollateral - tradingFee - spreadFee;
-        collateralAtRiskPercentage = (params.collateralAtRisk - tradingFee) * 1e18 / totalCollateral;
+        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));

@@ -210,7 +210,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         uint256 tradingFee = (params.collateralAtRisk - params.makerCollateral) * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
         totalFee = totalFee + spreadFee + tradingFee;
         totalCollateral = totalCollateral - tradingFee - spreadFee;
-        collateralAtRiskPercentage = (params.collateralAtRisk - tradingFee) * 1e18 / totalCollateral;
+        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
 
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));

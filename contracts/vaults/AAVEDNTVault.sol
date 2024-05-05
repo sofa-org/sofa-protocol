@@ -202,7 +202,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         // calculate atoken shares
         uint256 term;
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (params.collateralAtRisk - params.makerCollateral) / 1e18;
-        uint256 collateralAtRiskPercentage = (params.collateralAtRisk - tradingFee) * 1e18 / (totalCollateral - tradingFee);
+        uint256 collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee);
         {
         uint256 aTokenShare;
         POOL.supply(address(COLLATERAL), totalCollateral, address(this), REFERRAL_CODE);
@@ -223,7 +223,6 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         // startDate = ((expiry-28800)/86400+1)*86400+28800
         term = (params.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
         require(term > 0, "Vault: invalid term");
-        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
         _mint(_msgSender(), productId, aTokenShare / SHARE_MULTIPLIER, "");
