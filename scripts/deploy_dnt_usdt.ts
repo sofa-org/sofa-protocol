@@ -29,16 +29,18 @@ async function main() {
     process.env.DNT_ADDRESS,
     process.env.WETH_ADDRESS,
     process.env.USDT_ADDRESS,
-    process.env.RCH_ADDRESS,
-    process.env.UNI_ROUTERV2_ADDRESS,
-    ethers.utils.parseEther("0.01"),
-    process.env.HL_ORACLE_ETH
+    process.env.FEE_COLLECTOR_ADDRESS,
+    process.env.HL_ORACLE_BTC
   ], {
     gasPrice: gas,
   });
 
   await vault.deployed();
   console.log(`|DNTVault(USDT)|${vault.address}|`);
+
+  await hre.run("verify:verify", {
+    address: vault.address,
+  });
 }
 
 // We recommend this pattern to be able to use async/await everywhere

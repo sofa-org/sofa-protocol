@@ -15,7 +15,7 @@ async function main() {
   // await hre.run('compile');
 
   // We get the contract to deploy
-  const privateKey = process.env.MAKER_PRIVATE_KEY; // 用你的私钥替换这里
+  const privateKey = process.env.MAKER_PRIVATE_KEY2; // 用你的私钥替换这里
   const wallet = new ethers.Wallet(privateKey, ethers.provider);
 
   const gas = await ethers.provider.getGasPrice();
@@ -25,28 +25,28 @@ async function main() {
   const wbtc = ERC20.attach(process.env.WBTC_ADDRESS);
   const amount = ethers.utils.parseUnits("100000", 18);
 
-  let vaults = process.env.ETH_VAULT_ADDRESSES.split(',');
+  // let vaults = process.env.ETH_VAULT_ADDRESSES.split(',');
   let receipt;
-  for (let i = 0; i < vaults.length; i++) {
-    receipt = await weth.approve(vaults[i], amount, {
-      gasPrice: gas,
-    });
-    console.log('Transaction receipt:', receipt);
-  }
-  vaults = process.env.USDT_VAULT_ADDRESSES.split(',');
+  // for (let i = 0; i < vaults.length; i++) {
+  //   receipt = await weth.approve(vaults[i], amount, {
+  //     gasPrice: gas,
+  //   });
+  //   console.log('Transaction receipt:', receipt);
+  // }
+  let vaults = process.env.USDT_VAULT_ADDRESSES.split(',');
   for (let i = 0; i < vaults.length; i++) {
     receipt = await usdt.approve(vaults[i], amount, {
       gasPrice: gas,
     });
     console.log('Transaction receipt:', receipt);
   }
-  vaults = process.env.BTC_VAULT_ADDRESSES.split(',');
-  for (let i = 0; i < vaults.length; i++) {
-    receipt = await wbtc.approve(vaults[i], amount, {
-      gasPrice: gas,
-    });
-    console.log('Transaction receipt:', receipt);
-  }
+  // vaults = process.env.BTC_VAULT_ADDRESSES.split(',');
+  // for (let i = 0; i < vaults.length; i++) {
+  //   receipt = await wbtc.approve(vaults[i], amount, {
+  //     gasPrice: gas,
+  //   });
+  //   console.log('Transaction receipt:', receipt);
+  // }
 
   return;
 }
