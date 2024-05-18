@@ -236,11 +236,10 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     }
 
     function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
-        (uint256 latestTerm, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
+        (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
         require(_isBurnable, "Vault: not burnable");
 
         // check if settled
-        uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
         require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
         uint256 productId = getProductId(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
@@ -287,13 +286,13 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         uint256[] memory payoffs = new uint256[](products.length);
         uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
-            // check if settled
-            uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
-            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
-
             Product memory product = products[i];
-            (uint256 latestTerm, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
+
+            (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
             require(_isBurnable, "Vault: not burnable");
+
+            // check if settled
+            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
             uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, product.isMaker);
             uint256 amount = balanceOf(_msgSender(), productId);
@@ -370,19 +369,19 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     function isBurnable(uint256 term, uint256 expiry, uint256[2] memory anchorPrices)
         public
         view
-        returns (uint256, bool)
+        returns (uint256, uint256, bool)
     {
         if (expiry <= block.timestamp) {
-            return (term, true);
+            return (term, expiry, true);
         } else {
             uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
             uint256 termGap = (expiry - latestExpiry) / 86400;
             if (termGap > term) {
-                return (term, false);
+                return (term, latestExpiry, false);
             } else {
                 uint256 latestTerm = term - termGap;
                 uint256[2] memory prices = ORACLE.getHlPrices(latestTerm, latestExpiry);
-                return(latestTerm, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
+                return(latestTerm, latestExpiry, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
             }
         }
     }
