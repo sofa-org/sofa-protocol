@@ -181,13 +181,12 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         // trading fee
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
         totalFee += tradingFee;
-        totalCollateral -= tradingFee;
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(_msgSender(), productId, totalCollateral - tradingFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - tradingFee, "");
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
     }
@@ -282,13 +281,12 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             // trading fee
             uint256 fee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
             tradingFee += fee;
-            totalCollateral -= fee;
-            totalCollaterals[i] = totalCollateral;
+            totalCollaterals[i] = totalCollateral - fee;
 
             // mint product
             productIds[i] = getProductId(params.expiry, params.anchorPrices, uint256(0));
             uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
-            _mint(params.maker, makerProductId, totalCollateral, "");
+            _mint(params.maker, makerProductId, totalCollateral - fee, "");
 
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
         }

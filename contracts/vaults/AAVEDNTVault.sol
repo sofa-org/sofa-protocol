@@ -217,7 +217,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         // trading fee
         uint256 tradingFeeShare =  aTokenShare * tradingFee / totalCollateral;
         aTokenShare -= tradingFeeShare;
-        totalFee += tradingFeeShare / SHARE_MULTIPLIER;
+        totalFee += tradingFeeShare;
 
         // mint product
         // startDate = ((expiry-28800)/86400+1)*86400+28800
@@ -225,8 +225,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         require(term > 0, "Vault: invalid term");
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
-        _mint(_msgSender(), productId, aTokenShare / SHARE_MULTIPLIER, "");
-        _mint(params.maker, makerProductId, aTokenShare / SHARE_MULTIPLIER, "");
+        _mint(_msgSender(), productId, aTokenShare, "");
+        _mint(params.maker, makerProductId, aTokenShare, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral, collateralAtRiskPercentage);
@@ -274,8 +274,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
         // check self balance of collateral and transfer payoff
         if (payoffShare > 0) {
-            payoff = payoffShare * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
-            totalSupply -= payoffShare * SHARE_MULTIPLIER;
+            payoff = payoffShare * ATOKEN.balanceOf(address(this)) / totalSupply;
+            totalSupply -= payoffShare;
             emit Burned(_msgSender(), productId, amount, payoff);
         } else {
             emit Burned(_msgSender(), productId, amount, 0);
@@ -338,15 +338,15 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
             productIds[i] = productId;
             amounts[i] = amount;
-            payoffs[i] = payoffShare * aTokenBalance * SHARE_MULTIPLIER / totalSupply;
+            payoffs[i] = payoffShare * aTokenBalance / totalSupply;
         }
         if (settlementFee > 0) {
             totalFee += settlementFee;
         }
         // check self balance of collateral and transfer payoff
         if (totalPayoffShare > 0) {
-            totalPayoff = totalPayoffShare * aTokenBalance * SHARE_MULTIPLIER / totalSupply;
-            totalSupply -= totalPayoffShare * SHARE_MULTIPLIER;
+            totalPayoff = totalPayoffShare * aTokenBalance / totalSupply;
+            totalSupply -= totalPayoffShare;
         }
 
         // burn product
@@ -359,8 +359,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         require(totalFee > 0, "Vault: zero fee");
         uint256 fee = totalFee;
         totalFee = 0;
-        uint256 payoff = fee * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
-        totalSupply -= fee * SHARE_MULTIPLIER;
+        uint256 payoff = fee * ATOKEN.balanceOf(address(this)) / totalSupply;
+        totalSupply -= fee;
         require(POOL.withdraw(address(COLLATERAL), payoff, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), payoff);

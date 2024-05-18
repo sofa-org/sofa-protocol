@@ -128,13 +128,13 @@ describe("ETHLeverageSmartTrendVault", function () {
       balanceAfter = await ethers.provider.getBalance(minter.address);
       expect(balanceAfter.sub(balanceBefore)).to.above(parseEther("87.05549"));
       await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("93.115593404804162821"), parseEther("5.999999999999999964"));
-      expect(await vault.totalFee()).to.equal(parseEther("13.948513190391674356"));
+      expect(await vault.totalFee()).to.equal(parseEther("13.948813190391674356"));
       expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("100000"));
       expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99985.999999999999999964"));
 
       // withdraw fee
       const feeCollector = await vault.feeCollector();
-      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("13.948513190391674356"));
+      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("13.948813190391674356"));
     });
   });
 

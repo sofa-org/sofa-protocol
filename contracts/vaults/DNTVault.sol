@@ -183,7 +183,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         // trading fee
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
         totalFee += tradingFee;
-        totalCollateral -= tradingFee;
 
         // mint product
         // startDate = ((expiry-28800)/86400+1)*86400+28800
@@ -192,8 +191,8 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         {
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(_msgSender(), productId, totalCollateral - tradingFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - tradingFee, "");
         }
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral);
     }
@@ -288,8 +287,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             // trading fee
             uint256 fee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
             tradingFee += fee;
-            totalCollateral -= fee;
-            totalCollaterals[i] = totalCollateral;
+            totalCollaterals[i] = totalCollateral - fee;
 
             // mint product
             // startDate = ((expiry-28800)/86400+1)*86400+28800
@@ -298,7 +296,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             {
             productIds[i] = getProductId(term, params.expiry, params.anchorPrices, uint256(0));
             uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, uint256(1));
-            _mint(params.maker, makerProductId, totalCollateral, "");
+            _mint(params.maker, makerProductId, totalCollateral - fee, "");
             }
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral);
         }
