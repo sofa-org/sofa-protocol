@@ -8,6 +8,7 @@ import "../interfaces/IAutomatedFunctionsConsumer.sol";
 contract HlOracle is AutomationCompatibleInterface {
     mapping(uint256 => uint256[2]) public settlePrices;
     IAutomatedFunctionsConsumer internal immutable AUTOMATED_FUNCTIONS_CONSUMER;
+    uint256 private latestExpiryUpdated = 0;
 
     event Settled(uint256 expiry, uint256[2] settlePrices);
 
@@ -48,7 +49,21 @@ contract HlOracle is AutomationCompatibleInterface {
         uint256 expiry = block.timestamp - block.timestamp % 86400 + 28800;
         require(settlePrices[expiry][1] == 0, "Oracle: already settled");
 
-        settlePrices[expiry] = getLatestPrice();
+        uint256[2] memory currentPrices = getLatestPrice();
+        if (latestExpiryUpdated != 0 && latestExpiryUpdated < expiry - 86400 * 2) {
+            uint256 missedDays = (expiry - latestExpiryUpdated) / 86400;
+            uint256[2] memory startPrices = settlePrices[latestExpiryUpdated];
+
+            for (uint256 i = 1; i < missedDays; i++) {
+                uint256 missedExpiry = latestExpiryUpdated + i * 86400;
+                settlePrices[missedExpiry][0] = startPrices[0] + (currentPrices[0] - startPrices[0]) * i / missedDays;
+                settlePrices[missedExpiry][1] = startPrices[1] + (currentPrices[1] - startPrices[1]) * i / missedDays;
+                emit Settled(missedExpiry, settlePrices[missedExpiry]);
+            }
+        }
+
+        settlePrices[expiry] = currentPrices;
+        latestExpiryUpdated = expiry;
 
         emit Settled(expiry, settlePrices[expiry]);
     }
