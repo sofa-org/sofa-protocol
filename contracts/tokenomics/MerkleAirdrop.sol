@@ -41,6 +41,7 @@ contract MerkleAirdrop is Ownable {
 
     function claim(uint256 index, uint256 amount, bytes32[] calldata merkleProof) external {
         require(!isClaimed(index), "MerkleAirdrop: Drop already claimed.");
+        require(merkleRoots[index] != 0, "Airdrop: MerkleRoot not set for this day.");
 
         bytes32 node = keccak256(abi.encodePacked(_msgSender(), amount));
         require(MerkleProof.verify(merkleProof, merkleRoots[index], node), "MerkleAirdrop: Invalid proof.");
