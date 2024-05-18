@@ -171,7 +171,6 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
-        require(params.collateralAtRisk <= totalCollateral, "Vault: invalid collateral");
         require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
         require(referral != _msgSender(), "Vault: invalid referral");
 
@@ -202,6 +201,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (params.collateralAtRisk - params.makerCollateral) / 1e18;
         uint256 collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee);
+        require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
         // calculate atoken shares
         {
         uint256 aTokenShare;
