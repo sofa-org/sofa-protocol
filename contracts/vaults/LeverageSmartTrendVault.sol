@@ -10,17 +10,17 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "../interfaces/IPermit2.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
-import "../libs/SignatureDecoding.sol";
 import "../utils/SignatureBitMap.sol";
 
 contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
-    using SignatureDecoding for bytes;
+    using SignatureCheckerUpgradeable for address;
 
     struct Product {
         uint256 expiry;
@@ -165,7 +165,6 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
-        require(params.collateralAtRisk <= totalCollateral, "Vault: invalid collateral");
         require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
         require(referral != _msgSender(), "Vault: invalid referral");
 
@@ -185,8 +184,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
                                      params.deadline,
                                      address(this)))
         ));
-        (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-        require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+        require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
         consumeSignature(params.makerSignature);
 
         // transfer makerCollateral
@@ -203,14 +201,14 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         require(borrowFee - spreadFee >= params.collateralAtRisk - params.makerCollateral, "Vault: invalid collateral at risk");
         uint256 tradingFee = (params.collateralAtRisk - params.makerCollateral) * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
         totalFee = totalFee + spreadFee + tradingFee;
-        totalCollateral = totalCollateral - tradingFee - spreadFee;
-        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
+        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee - spreadFee);
+        require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(_msgSender(), productId, totalCollateral - tradingFee - spreadFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - tradingFee - spreadFee, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral, collateralAtRiskPercentage);
@@ -227,7 +225,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -267,7 +266,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 

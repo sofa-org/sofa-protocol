@@ -247,10 +247,10 @@ describe("FeeCollector", function () {
     // withdraw fee
     expect(await vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("2"));
 
-    await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address, rch.address])).to.be.reverted;
+    await expect(feeCollector["swapRCH(address,uint256,uint256,address[])"](collateral.address, 0, deadline, [collateral.address, weth.address, rch.address])).to.be.reverted;
     await feeCollector.approve(collateral.address, uniRouterV2.address);
-    await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address])).to.be.revertedWith("Collector: invalid path");
-    await expect(feeCollector["swapRCH(address,uint256,address[])"](collateral.address, 0, [collateral.address, weth.address, rch.address])).to.changeTokenBalance(rch, feeCollector, parseEther("0.894447823170063419"));
+    await expect(feeCollector["swapRCH(address,uint256,uint256,address[])"](collateral.address, 0, deadline, [collateral.address, weth.address])).to.be.revertedWith("Collector: invalid path");
+    await expect(feeCollector["swapRCH(address,uint256,uint256,address[])"](collateral.address, 0, deadline, [collateral.address, weth.address, rch.address])).to.changeTokenBalance(rch, feeCollector, parseEther("0.894447823170063419"));
     expect(await collateral.balanceOf(feeCollector.address)).to.equal(parseEther("0"));
     await expect(feeCollector.burnRCH()).to.changeTokenBalance(rch, feeCollector, parseEther("-0.894447823170063419"));
   });
@@ -285,12 +285,12 @@ describe("FeeCollector", function () {
 
     let tokens = [collateral.address, weth.address];
     let path = encodePath(tokens, new Array(tokens.length - 1).fill(FeeAmount.MEDIUM));
-    await expect(feeCollector["swapRCH(address,uint256,bytes)"](collateral.address, 0, path)).to.be.reverted;
+    await expect(feeCollector["swapRCH(address,uint256,uint256,bytes)"](collateral.address, 0, deadline, path)).to.be.reverted;
     await feeCollector.approve(collateral.address, uniRouterV3.address);
-    await expect(feeCollector["swapRCH(address,uint256,bytes)"](collateral.address, 0, path)).to.be.revertedWith("Collector: invalid path");
+    await expect(feeCollector["swapRCH(address,uint256,uint256,bytes)"](collateral.address, 0, deadline, path)).to.be.revertedWith("Collector: invalid path");
     tokens = [collateral.address, weth.address, rch.address];
     path = encodePath(tokens, new Array(tokens.length - 1).fill(FeeAmount.MEDIUM));
-    await expect(feeCollector["swapRCH(address,uint256,bytes)"](collateral.address, 0, path)).to.changeTokenBalance(rch, feeCollector, parseEther("0.894447823170063418"));
+    await expect(feeCollector["swapRCH(address,uint256,uint256,bytes)"](collateral.address, 0, deadline, path)).to.changeTokenBalance(rch, feeCollector, parseEther("0.894447823170063418"));
     expect(await collateral.balanceOf(feeCollector.address)).to.equal(parseEther("0"));
     await expect(feeCollector.burnRCH()).to.changeTokenBalance(rch, feeCollector, parseEther("-0.894447823170063418"));
   });

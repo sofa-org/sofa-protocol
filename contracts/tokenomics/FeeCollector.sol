@@ -40,6 +40,7 @@ contract FeeCollector is Ownable {
     function swapRCH(
         address token,
         uint256 minPrice,
+        uint256 deadline,
         address[] calldata path
     ) external onlyOwner {
         // last element of path should be rch
@@ -52,13 +53,14 @@ contract FeeCollector is Ownable {
             amountIn * minPrice / 1e18,
             path,
             address(this),
-            block.timestamp + 10 minutes
+            deadline
         );
     }
 
     function swapRCH(
         address token,
         uint256 minPrice,
+        uint256 deadline,
         bytes calldata path
     ) external onlyOwner {
         uint256 balanceBefore = IERC20(rch).balanceOf(address(this));
@@ -67,7 +69,7 @@ contract FeeCollector is Ownable {
             ISwapRouter.ExactInputParams({
                 path: path,
                 recipient: address(this),
-                deadline: block.timestamp + 10 minutes,
+                deadline: deadline,
                 amountIn: amountIn,
                 amountOutMinimum: amountIn * minPrice / 1e18
            });

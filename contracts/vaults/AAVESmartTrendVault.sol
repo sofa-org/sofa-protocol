@@ -9,6 +9,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
 import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
@@ -18,13 +19,12 @@ import "../interfaces/IPermit2.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
-import "../libs/SignatureDecoding.sol";
 import "../utils/SignatureBitMap.sol";
 
 contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
     using ReserveLogic for DataTypes.ReserveData;
-    using SignatureDecoding for bytes;
+    using SignatureCheckerUpgradeable for address;
 
     struct Product {
         uint256 expiry;
@@ -171,7 +171,6 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
-        require(params.collateralAtRisk <= totalCollateral, "Vault: invalid collateral");
         require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
         require(referral != _msgSender(), "Vault: invalid referral");
 
@@ -191,8 +190,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
                                      params.deadline,
                                      address(this)))
         ));
-        (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-        require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+        require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
         consumeSignature(params.makerSignature);
 
         // transfer makerCollateral
@@ -202,6 +200,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (params.collateralAtRisk - params.makerCollateral) / 1e18;
         uint256 collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee);
+        require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
         // calculate atoken shares
         {
         uint256 aTokenShare;
@@ -217,14 +216,14 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         // trading fee
         uint256 tradingFeeShare = aTokenShare * tradingFee / totalCollateral;
         aTokenShare -= tradingFeeShare;
-        totalFee += tradingFeeShare / SHARE_MULTIPLIER;
+        totalFee += tradingFeeShare;
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
 
-        _mint(_msgSender(), productId, aTokenShare / SHARE_MULTIPLIER, "");
-        _mint(params.maker, makerProductId, aTokenShare / SHARE_MULTIPLIER, "");
+        _mint(_msgSender(), productId, aTokenShare, "");
+        _mint(params.maker, makerProductId, aTokenShare, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral, collateralAtRiskPercentage);
@@ -241,7 +240,8 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         if (payoff > 0) {
             require(POOL.withdraw(address(COLLATERAL), payoff, address(this)) > 0, "Vault: withdraw failed");
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -268,8 +268,8 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
         // check self balance of collateral and transfer payoff
         if (payoffShare > 0) {
-            payoff = payoffShare * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
-            totalSupply -= payoffShare * SHARE_MULTIPLIER;
+            payoff = payoffShare * ATOKEN.balanceOf(address(this)) / totalSupply;
+            totalSupply -= payoffShare;
             emit Burned(_msgSender(), productId, amount, payoff);
         } else {
             emit Burned(_msgSender(), productId, amount, 0);
@@ -291,7 +291,8 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         if (totalPayoff > 0) {
             require(POOL.withdraw(address(COLLATERAL), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -327,15 +328,15 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
             productIds[i] = productId;
             amounts[i] = amount;
-            payoffs[i] = payoffShare * aTokenBalance * SHARE_MULTIPLIER / totalSupply;
+            payoffs[i] = payoffShare * aTokenBalance / totalSupply;
         }
         if (settlementFee > 0) {
             totalFee += settlementFee;
         }
         // check self balance of collateral and transfer payoff
         if (totalPayoffShare > 0) {
-            totalPayoff = totalPayoffShare * aTokenBalance * SHARE_MULTIPLIER / totalSupply;
-            totalSupply -= totalPayoffShare * SHARE_MULTIPLIER;
+            totalPayoff = totalPayoffShare * aTokenBalance / totalSupply;
+            totalSupply -= totalPayoffShare;
         }
 
         // burn product
@@ -348,8 +349,8 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         require(totalFee > 0, "Vault: zero fee");
         uint256 fee = totalFee;
         totalFee = 0;
-        uint256 payoff = fee * ATOKEN.balanceOf(address(this)) * SHARE_MULTIPLIER / totalSupply;
-        totalSupply -= fee * SHARE_MULTIPLIER;
+        uint256 payoff = fee * ATOKEN.balanceOf(address(this)) / totalSupply;
+        totalSupply -= fee;
         require(POOL.withdraw(address(COLLATERAL), payoff, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), payoff);

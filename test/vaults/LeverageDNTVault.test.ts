@@ -62,7 +62,7 @@ describe("LeverageDNTVault", function () {
       await time.increaseTo(expiry - 86400 * 365);
       const deadline = await time.latest() + 600;
       let minterNonce = 0;
-      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid collateral");
+      await expect(mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: invalid collateral at risk");
       collateralAtRisk = parseEther("12");
       const { collateralAtRiskPercentage } = await mint(totalCollateral, expiry, anchorPrices, collateralAtRisk, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
       minterNonce = 1;

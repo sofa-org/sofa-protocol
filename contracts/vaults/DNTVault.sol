@@ -9,17 +9,17 @@ import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "../interfaces/IPermit2.sol";
 import "../interfaces/IDNTStrategy.sol";
 import "../interfaces/IHlOracle.sol";
 import "../interfaces/IFeeCollector.sol";
-import "../libs/SignatureDecoding.sol";
 import "../utils/SignatureBitMap.sol";
 
 contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
-    using SignatureDecoding for bytes;
+    using SignatureCheckerUpgradeable for address;
 
     struct Product {
         uint256 term;
@@ -69,7 +69,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         _;
     }
 
-    // Deposit ETH if balance is not enough for withdrawal
     receive() external payable {}
 
     function initialize(
@@ -172,8 +171,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
                                      params.deadline,
                                      address(this)))
         ));
-        (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-        require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+        require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
         consumeSignature(params.makerSignature);
 
         // transfer makercollateral
@@ -183,7 +181,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         // trading fee
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
         totalFee += tradingFee;
-        totalCollateral -= tradingFee;
 
         // mint product
         // startDate = ((expiry-28800)/86400+1)*86400+28800
@@ -192,8 +189,8 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         {
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(_msgSender(), productId, totalCollateral - tradingFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - tradingFee, "");
         }
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral);
     }
@@ -277,8 +274,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
                                                                 params.deadline,
                                                                 address(this)))
                           ));
-            (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-            require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+            require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
             consumeSignature(params.makerSignature);
 
             // transfer makercollateral
@@ -288,8 +284,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             // trading fee
             uint256 fee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
             tradingFee += fee;
-            totalCollateral -= fee;
-            totalCollaterals[i] = totalCollateral;
+            totalCollaterals[i] = totalCollateral - fee;
 
             // mint product
             // startDate = ((expiry-28800)/86400+1)*86400+28800
@@ -298,7 +293,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             {
             productIds[i] = getProductId(term, params.expiry, params.anchorPrices, uint256(0));
             uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, uint256(1));
-            _mint(params.maker, makerProductId, totalCollateral, "");
+            _mint(params.maker, makerProductId, totalCollateral - fee, "");
             }
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral);
         }
@@ -316,21 +311,20 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(term, expiry, anchorPrices, isMaker);
         if (payoff > 0) {
-           WETH.withdraw(payoff);
-           payable(_msgSender()).transfer(payoff);
+            WETH.withdraw(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
     function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
-        uint256 productId = getProductId(term, expiry, anchorPrices, isMaker);
-
-        (uint256 latestTerm, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
+        (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
         require(_isBurnable, "Vault: not burnable");
 
         // check if settled
-        uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
         require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
+        uint256 productId = getProductId(term, expiry, anchorPrices, isMaker);
         uint256 amount = balanceOf(_msgSender(), productId);
         require(amount > 0, "Vault: zero amount");
 
@@ -365,7 +359,8 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         // check self balance of collateral and transfer payoff
         if (totalPayoff > 0) {
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -375,16 +370,15 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         uint256[] memory payoffs = new uint256[](products.length);
         uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
-            // check if settled
-            uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
-            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
-
             Product memory product = products[i];
-            uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.isMaker);
 
-            (uint256 latestTerm, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
+            (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
             require(_isBurnable, "Vault: not burnable");
 
+            // check if settled
+            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+
+            uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.isMaker);
             uint256 amount = balanceOf(_msgSender(), productId);
             require(amount > 0, "Vault: zero amount");
 
@@ -447,19 +441,19 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function isBurnable(uint256 term, uint256 expiry, uint256[2] memory anchorPrices)
         public
         view
-        returns (uint256, bool)
+        returns (uint256, uint256, bool)
     {
         if (expiry <= block.timestamp) {
-            return (term, true);
+            return (term, expiry, true);
         } else {
             uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
             uint256 termGap = (expiry - latestExpiry) / 86400;
             if (termGap > term) {
-                return (term, false);
+                return (term, latestExpiry, false);
             } else {
                 uint256 latestTerm = term - termGap;
                 uint256[2] memory prices = ORACLE.getHlPrices(latestTerm, latestExpiry);
-                return(latestTerm, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
+                return(latestTerm, latestExpiry, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
             }
         }
     }

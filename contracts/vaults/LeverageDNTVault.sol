@@ -10,17 +10,17 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "../interfaces/IPermit2.sol";
 import "../interfaces/IDNTStrategy.sol";
 import "../interfaces/IHlOracle.sol";
 import "../interfaces/IFeeCollector.sol";
-import "../libs/SignatureDecoding.sol";
 import "../utils/SignatureBitMap.sol";
 
 contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
-    using SignatureDecoding for bytes;
+    using SignatureCheckerUpgradeable for address;
 
     struct Product {
         uint256 term;
@@ -167,7 +167,6 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         // require expiry must be 8:00 UTC
         require(params.expiry % 86400 == 28800, "Vault: invalid expiry");
         require(params.anchorPrices[0] < params.anchorPrices[1], "Vault: invalid strike prices");
-        require(params.collateralAtRisk <= totalCollateral, "Vault: invalid collateral");
         require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
         require(referral != _msgSender(), "Vault: invalid referral");
 
@@ -187,8 +186,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
                                      params.deadline,
                                      address(this)))
         ));
-        (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-        require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+        require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
         consumeSignature(params.makerSignature);
 
         // transfer makercollateral
@@ -209,13 +207,13 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         require(borrowFee - spreadFee >= params.collateralAtRisk - params.makerCollateral, "Vault: invalid collateral at risk");
         uint256 tradingFee = (params.collateralAtRisk - params.makerCollateral) * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
         totalFee = totalFee + spreadFee + tradingFee;
-        totalCollateral = totalCollateral - tradingFee - spreadFee;
-        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / totalCollateral;
+        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee - spreadFee);
+        require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
 
         uint256 productId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(term, params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(_msgSender(), productId, totalCollateral - tradingFee - spreadFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - tradingFee - spreadFee, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, term, params.expiry, params.anchorPrices, params.makerCollateral, collateralAtRiskPercentage);
@@ -232,16 +230,16 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
     function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
-        (uint256 latestTerm, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
+        (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
         require(_isBurnable, "Vault: not burnable");
 
         // check if settled
-        uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
         require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
         uint256 productId = getProductId(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
@@ -277,7 +275,8 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
 
        if (totalPayoff > 0) {
            WETH.withdraw(totalPayoff);
-           payable(_msgSender()).transfer(totalPayoff);
+           (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+           require(success, "Failed to send ETH");
        }
     }
 
@@ -287,13 +286,13 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         uint256[] memory payoffs = new uint256[](products.length);
         uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
-            // check if settled
-            uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
-            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
-
             Product memory product = products[i];
-            (uint256 latestTerm, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
+
+            (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
             require(_isBurnable, "Vault: not burnable");
+
+            // check if settled
+            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
             uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, product.isMaker);
             uint256 amount = balanceOf(_msgSender(), productId);
@@ -370,19 +369,19 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     function isBurnable(uint256 term, uint256 expiry, uint256[2] memory anchorPrices)
         public
         view
-        returns (uint256, bool)
+        returns (uint256, uint256, bool)
     {
         if (expiry <= block.timestamp) {
-            return (term, true);
+            return (term, expiry, true);
         } else {
             uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
             uint256 termGap = (expiry - latestExpiry) / 86400;
             if (termGap > term) {
-                return (term, false);
+                return (term, latestExpiry, false);
             } else {
                 uint256 latestTerm = term - termGap;
                 uint256[2] memory prices = ORACLE.getHlPrices(latestTerm, latestExpiry);
-                return(latestTerm, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
+                return(latestTerm, latestExpiry, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
             }
         }
     }

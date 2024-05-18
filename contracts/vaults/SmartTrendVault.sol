@@ -9,17 +9,17 @@ import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "../interfaces/IPermit2.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
-import "../libs/SignatureDecoding.sol";
 import "../utils/SignatureBitMap.sol";
 
 contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
-    using SignatureDecoding for bytes;
+    using SignatureCheckerUpgradeable for address;
 
     struct Product {
         uint256 expiry;
@@ -170,8 +170,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
                                      params.deadline,
                                      address(this)))
         ));
-        (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-        require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+        require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
         consumeSignature(params.makerSignature);
 
         // transfer makerCollateral
@@ -181,13 +180,12 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         // trading fee
         uint256 tradingFee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
         totalFee += tradingFee;
-        totalCollateral -= tradingFee;
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(_msgSender(), productId, totalCollateral - tradingFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - tradingFee, "");
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
     }
@@ -271,8 +269,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
                                                                 params.deadline,
                                                                 address(this)))
                           ));
-            (uint8 v, bytes32 r, bytes32 s) = params.makerSignature.decodeSignature();
-            require(params.maker == ecrecover(digest, v, r, s), "Vault: invalid maker signature");
+            require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
             consumeSignature(params.makerSignature);
 
             // transfer makercollateral
@@ -282,13 +279,12 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
             // trading fee
             uint256 fee = IFeeCollector(feeCollector).tradingFeeRate() * (totalCollateral - params.makerCollateral) / 1e18;
             tradingFee += fee;
-            totalCollateral -= fee;
-            totalCollaterals[i] = totalCollateral;
+            totalCollaterals[i] = totalCollateral - fee;
 
             // mint product
             productIds[i] = getProductId(params.expiry, params.anchorPrices, uint256(0));
             uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
-            _mint(params.maker, makerProductId, totalCollateral, "");
+            _mint(params.maker, makerProductId, totalCollateral - fee, "");
 
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
         }
@@ -307,7 +303,8 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         uint256 payoff = _burn(expiry, anchorPrices, isMaker);
         if (payoff > 0) {
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -351,7 +348,8 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         // check self balance of collateral and transfer payoff
         if (totalPayoff > 0) {
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
