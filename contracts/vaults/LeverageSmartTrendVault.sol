@@ -225,7 +225,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -265,7 +266,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 

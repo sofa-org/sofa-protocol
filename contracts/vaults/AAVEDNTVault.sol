@@ -243,7 +243,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         if (payoff > 0) {
             require(POOL.withdraw(address(COLLATERAL), payoff, address(this)) > 0, "Vault: withdraw failed");
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -296,7 +297,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
        if (totalPayoff > 0) {
            require(POOL.withdraw(address(COLLATERAL), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
            WETH.withdraw(totalPayoff);
-           payable(_msgSender()).transfer(totalPayoff);
+           (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+           require(success, "Failed to send ETH");
        }
     }
 

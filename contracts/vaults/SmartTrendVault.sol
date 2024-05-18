@@ -303,7 +303,8 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         uint256 payoff = _burn(expiry, anchorPrices, isMaker);
         if (payoff > 0) {
             WETH.withdraw(payoff);
-            payable(_msgSender()).transfer(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -347,7 +348,8 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         // check self balance of collateral and transfer payoff
         if (totalPayoff > 0) {
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 

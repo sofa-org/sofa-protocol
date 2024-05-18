@@ -312,8 +312,9 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(term, expiry, anchorPrices, isMaker);
         if (payoff > 0) {
-           WETH.withdraw(payoff);
-           payable(_msgSender()).transfer(payoff);
+            WETH.withdraw(payoff);
+            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
@@ -361,7 +362,8 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         // check self balance of collateral and transfer payoff
         if (totalPayoff > 0) {
             WETH.withdraw(totalPayoff);
-            payable(_msgSender()).transfer(totalPayoff);
+            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+            require(success, "Failed to send ETH");
         }
     }
 
