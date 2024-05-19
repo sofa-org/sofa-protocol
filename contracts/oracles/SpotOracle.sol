@@ -7,7 +7,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract SpotOracle {
     mapping(uint256 => uint256) public settlePrices;
     AggregatorV3Interface immutable internal PRICEFEED;
-    uint256 private latestExpiryUpdated = 0;
+    uint256 public latestExpiryUpdated = 0;
 
     event Settled(uint256 expiry, uint256 settlePrice);
 
@@ -29,7 +29,12 @@ contract SpotOracle {
 
             for (uint256 i = 1; i < missedDays; i++) {
                 uint256 missedExpiry = latestExpiryUpdated + i * 86400;
-                uint256 missedDayPrice = startPrice + (currentPrice - startPrice) * i / missedDays;
+                uint256 missedDayPrice;
+                if (startPrice > currentPrice) {
+                    missedDayPrice = startPrice - (startPrice - currentPrice) * i / missedDays;
+                } else {
+                    missedDayPrice = startPrice + (currentPrice - startPrice) * i / missedDays;
+                }
                 settlePrices[missedExpiry] = missedDayPrice;
                 emit Settled(missedExpiry, missedDayPrice);
             }
