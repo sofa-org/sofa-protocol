@@ -194,8 +194,8 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
 
         uint256 collateralAtRiskPercentage;
         {
-        // (totalCollateral - makerCollateral) = minterCollateral * (1 + LEVERAGE_RATIO) + minterCollateral * LEVERAGE_RATIO * borrowAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
-        uint256 minterCollateral = (totalCollateral - params.makerCollateral) * APR_BASE / (APR_BASE + LEVERAGE_RATIO * APR_BASE + LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
+        // (totalCollateral - makerCollateral) = minterCollateral + minterCollateral * LEVERAGE_RATIO * borrowAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
+        uint256 minterCollateral = (totalCollateral - params.makerCollateral) * APR_BASE / (APR_BASE + LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
         uint256 borrowFee = minterCollateral * LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
         uint256 spreadFee = minterCollateral * LEVERAGE_RATIO * spreadAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
         require(borrowFee - spreadFee >= params.collateralAtRisk - params.makerCollateral, "Vault: invalid collateral at risk");
