@@ -50,7 +50,7 @@ contract HlOracle is AutomationCompatibleInterface {
         require(settlePrices[expiry][1] == 0, "Oracle: already settled");
 
         uint256[2] memory currentPrices = getLatestPrice();
-        if (latestExpiryUpdated != 0 && latestExpiryUpdated < expiry - 86400 * 2) {
+        if (latestExpiryUpdated != 0 && latestExpiryUpdated <= expiry - 86400 * 2) {
             uint256 missedDays = (expiry - latestExpiryUpdated) / 86400;
             uint256[2] memory startPrices = settlePrices[latestExpiryUpdated];
 

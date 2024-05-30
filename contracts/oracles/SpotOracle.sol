@@ -23,7 +23,7 @@ contract SpotOracle {
         require(settlePrices[expiry] == 0, "Oracle: already settled");
 
         uint256 currentPrice = uint256(getLatestPrice());
-        if (latestExpiryUpdated != 0 && latestExpiryUpdated < expiry - 86400 * 2) {
+        if (latestExpiryUpdated != 0 && latestExpiryUpdated <= expiry - 86400 * 2) {
             uint256 missedDays = (expiry - latestExpiryUpdated) / 86400;
             uint256 startPrice = settlePrices[latestExpiryUpdated];
 
