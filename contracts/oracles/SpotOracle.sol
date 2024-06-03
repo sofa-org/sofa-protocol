@@ -20,6 +20,7 @@ contract SpotOracle {
     // settle price
     function settle() public {
         uint256 expiry = block.timestamp - block.timestamp % 86400 + 28800;
+        require(block.timestamp >= expiry, "Oracle: not expired");
         require(settlePrices[expiry] == 0, "Oracle: already settled");
 
         uint256 currentPrice = uint256(getLatestPrice());
