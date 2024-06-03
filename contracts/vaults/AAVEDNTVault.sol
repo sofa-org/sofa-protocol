@@ -2,7 +2,6 @@
 
 pragma solidity 0.8.10;
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
@@ -60,13 +59,13 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     string public name;
     string public symbol;
 
-    IWETH public WETH;
-    IPermit2 public PERMIT2;
-    IDNTStrategy public STRATEGY;
-    IERC20Metadata public COLLATERAL;
-    IPool public POOL;
-    IAToken public ATOKEN;
-    IHlOracle public ORACLE;
+    IWETH public weth;
+    IPermit2 public permit2;
+    IDNTStrategy public strategy;
+    IERC20Metadata public collateral;
+    IPool public pool;
+    IAToken public aToken;
+    IHlOracle public oracle;
 
     uint256 totalSupply;
     uint256 public totalFee;
@@ -79,7 +78,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     event FeeCollected(address collector, uint256 amount);
 
     modifier onlyETHVault() {
-        require(address(COLLATERAL) == address(WETH), "Vault: only ETH vault");
+        require(address(collateral) == address(weth), "Vault: only ETH vault");
         _;
     }
 
@@ -99,15 +98,15 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         name = name_;
         symbol = symbol_;
 
-        WETH = IWETH(weth_);
-        PERMIT2 = permit_;
-        STRATEGY = strategy_;
+        weth = IWETH(weth_);
+        permit2 = permit_;
+        strategy = strategy_;
 
-        COLLATERAL = IERC20Metadata(collateral_);
-        ORACLE = oracle_;
+        collateral = IERC20Metadata(collateral_);
+        oracle = oracle_;
 
-        POOL = pool_;
-        ATOKEN = IAToken(pool_.getReserveData(address(collateral_)).aTokenAddress);
+        pool = pool_;
+        aToken = IAToken(pool_.getReserveData(address(collateral_)).aTokenAddress);
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 EIP712DOMAIN_TYPEHASH,
@@ -119,7 +118,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         );
         feeCollector = feeCollector_;
         // Approve once for max amount
-        COLLATERAL.safeApprove(address(pool_), type(uint256).max);
+        collateral.safeApprove(address(pool_), type(uint256).max);
 
         __Context_init();
         __ERC1155_init("");
@@ -134,19 +133,19 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         address referral
     ) external {
         // transfer collateral
-        uint256 collateral = totalCollateral - params.makerCollateral;
-        PERMIT2.permitTransferFrom(
+        uint256 depositAmount = totalCollateral - params.makerCollateral;
+        permit2.permitTransferFrom(
             IPermit2.PermitTransferFrom({
                 permitted: IPermit2.TokenPermissions({
-                    token: COLLATERAL,
-                    amount: collateral
+                    token: collateral,
+                    amount: depositAmount
                 }),
                 nonce: nonce,
                 deadline: params.deadline
             }),
             IPermit2.SignatureTransferDetails({
                 to: address(this),
-                requestedAmount: collateral
+                requestedAmount: depositAmount
             }),
             _msgSender(),
             minterPermitSignature
@@ -158,7 +157,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         MintParams calldata params,
         address referral
     ) external payable onlyETHVault {
-        WETH.deposit{value: msg.value}();
+        weth.deposit{value: msg.value}();
         _mint(
             params.makerCollateral + msg.value,
             params,
@@ -195,7 +194,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         consumeSignature(params.makerSignature);
 
         // transfer makercollateral
-        COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+        collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
         // calculate atoken shares
         uint256 term;
@@ -204,8 +203,8 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
         {
         uint256 aTokenShare;
-        POOL.supply(address(COLLATERAL), totalCollateral, address(this), REFERRAL_CODE);
-        uint256 aTokenBalance = ATOKEN.balanceOf(address(this));
+        pool.supply(address(collateral), totalCollateral, address(this), REFERRAL_CODE);
+        uint256 aTokenBalance = aToken.balanceOf(address(this));
         if (totalSupply > 0) {
             aTokenShare = totalCollateral * totalSupply / (aTokenBalance - totalCollateral);
         } else {
@@ -234,15 +233,15 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     function burn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external {
         uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-            require(POOL.withdraw(address(COLLATERAL), payoff, _msgSender()) > 0, "Vault: withdraw failed");
+            require(pool.withdraw(address(collateral), payoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
 
     function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-            require(POOL.withdraw(address(COLLATERAL), payoff, address(this)) > 0, "Vault: withdraw failed");
-            WETH.withdraw(payoff);
+            require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
+            weth.withdraw(payoff);
             (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
         }
@@ -253,7 +252,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         require(_isBurnable, "Vault: not burnable");
 
         // check if settled
-        require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+        require(oracle.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
         uint256 productId = getProductId(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         uint256 amount = balanceOf(_msgSender(), productId);
@@ -273,7 +272,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
         // check self balance of collateral and transfer payoff
         if (payoffShare > 0) {
-            payoff = payoffShare * ATOKEN.balanceOf(address(this)) / totalSupply;
+            payoff = payoffShare * aToken.balanceOf(address(this)) / totalSupply;
             totalSupply -= payoffShare;
             emit Burned(_msgSender(), productId, amount, payoff);
         } else {
@@ -287,15 +286,15 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     function burnBatch(Product[] calldata products) external {
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
-            require(POOL.withdraw(address(COLLATERAL), totalPayoff, _msgSender()) > 0, "Vault: withdraw failed");
+            require(pool.withdraw(address(collateral), totalPayoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
 
     function ethBurnBatch(Product[] calldata products) external onlyETHVault {
        uint256 totalPayoff = _burnBatch(products);
        if (totalPayoff > 0) {
-           require(POOL.withdraw(address(COLLATERAL), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
-           WETH.withdraw(totalPayoff);
+           require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
+           weth.withdraw(totalPayoff);
            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
            require(success, "Failed to send ETH");
        }
@@ -306,7 +305,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
-        uint256 aTokenBalance = ATOKEN.balanceOf(address(this));
+        uint256 aTokenBalance = aToken.balanceOf(address(this));
         uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             Product memory product = products[i];
@@ -315,7 +314,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
             require(_isBurnable, "Vault: not burnable");
 
             // check if settled
-            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+            require(oracle.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
             uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, product.isMaker);
             uint256 amount = balanceOf(_msgSender(), productId);
@@ -356,24 +355,24 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
     // withdraw fee
     function harvest() external {
-        require(totalFee > 0, "Vault: zero fee");
         uint256 fee = totalFee;
+        require(fee > 0, "Vault: zero fee");
         totalFee = 0;
-        uint256 payoff = fee * ATOKEN.balanceOf(address(this)) / totalSupply;
+        uint256 payoff = fee * aToken.balanceOf(address(this)) / totalSupply;
         totalSupply -= fee;
-        require(POOL.withdraw(address(COLLATERAL), payoff, feeCollector) > 0, "Vault: withdraw failed");
+        require(pool.withdraw(address(collateral), payoff, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), payoff);
     }
 
     function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        payoffShare = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
+        payoffShare = strategy.getMakerPayoff(anchorPrices, oracle.getHlPrices(term, expiry), maxPayoff);
     }
 
     function getMinterPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare, uint256 fee) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        uint256 payoffShareWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
+        uint256 payoffShareWithFee = strategy.getMinterPayoff(anchorPrices, oracle.getHlPrices(term, expiry), maxPayoff);
         fee = payoffShareWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoffShare = payoffShareWithFee - fee + (amount * 1e18 - amount * collateralAtRiskPercentage) / 1e18;
     }
@@ -385,7 +384,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
 
     // get decimals
     function decimals() external view returns (uint8) {
-        return COLLATERAL.decimals();
+        return collateral.decimals();
     }
 
     // check if the product is burnable
@@ -403,7 +402,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
                 return (term, latestExpiry, false);
             } else {
                 uint256 latestTerm = term - termGap;
-                uint256[2] memory prices = ORACLE.getHlPrices(latestTerm, latestExpiry);
+                uint256[2] memory prices = oracle.getHlPrices(latestTerm, latestExpiry);
                 return(latestTerm, latestExpiry, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
             }
         }

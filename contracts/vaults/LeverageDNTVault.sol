@@ -2,7 +2,6 @@
 
 pragma solidity 0.8.10;
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
@@ -55,11 +54,11 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     string public name;
     string public symbol;
 
-    IWETH public WETH;
-    IPermit2 public PERMIT2;
-    IDNTStrategy public STRATEGY;
-    IERC20Metadata public COLLATERAL;
-    IHlOracle public ORACLE;
+    IWETH public weth;
+    IPermit2 public permit2;
+    IDNTStrategy public strategy;
+    IERC20Metadata public collateral;
+    IHlOracle public oracle;
 
     uint256 public borrowAPR;
     uint256 public spreadAPR;
@@ -73,7 +72,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     event FeeCollected(address collector, uint256 amount);
 
     modifier onlyETHVault() {
-        require(address(COLLATERAL) == address(WETH), "Vault: only ETH vault");
+        require(address(collateral) == address(weth), "Vault: only ETH vault");
         _;
     }
 
@@ -94,12 +93,12 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         name = name_;
         symbol = symbol_;
 
-        WETH = IWETH(weth_);
-        PERMIT2 = permit_;
-        STRATEGY = strategy_;
+        weth = IWETH(weth_);
+        permit2 = permit_;
+        strategy = strategy_;
 
-        COLLATERAL = IERC20Metadata(collateral_);
-        ORACLE = oracle_;
+        collateral = IERC20Metadata(collateral_);
+        oracle = oracle_;
 
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -129,10 +128,10 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     ) external {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
-        PERMIT2.permitTransferFrom(
+        permit2.permitTransferFrom(
             IPermit2.PermitTransferFrom({
                 permitted: IPermit2.TokenPermissions({
-                    token: COLLATERAL,
+                    token: collateral,
                     amount: depositAmount
                 }),
                 nonce: nonce,
@@ -153,7 +152,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         MintParams calldata params,
         address referral
     ) external payable onlyETHVault {
-        WETH.deposit{value: msg.value}();
+        weth.deposit{value: msg.value}();
         _mint(
             params.makerCollateral + msg.value,
             params,
@@ -190,7 +189,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         consumeSignature(params.makerSignature);
 
         // transfer makercollateral
-        COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+        collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
         uint256 term;
         uint256 collateralAtRiskPercentage;
@@ -222,14 +221,14 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     function burn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external {
         uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-            COLLATERAL.safeTransfer(_msgSender(), payoff);
+            collateral.safeTransfer(_msgSender(), payoff);
         }
     }
 
     function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-            WETH.withdraw(payoff);
+            weth.withdraw(payoff);
             (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
         }
@@ -240,7 +239,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         require(_isBurnable, "Vault: not burnable");
 
         // check if settled
-        require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+        require(oracle.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
         uint256 productId = getProductId(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         uint256 amount = balanceOf(_msgSender(), productId);
@@ -266,7 +265,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         uint256 totalPayoff = _burnBatch(products);
 
         if (totalPayoff > 0) {
-            COLLATERAL.safeTransfer(_msgSender(), totalPayoff);
+            collateral.safeTransfer(_msgSender(), totalPayoff);
         }
     }
 
@@ -274,7 +273,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
        uint256 totalPayoff = _burnBatch(products);
 
        if (totalPayoff > 0) {
-           WETH.withdraw(totalPayoff);
+           weth.withdraw(totalPayoff);
            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
            require(success, "Failed to send ETH");
        }
@@ -292,7 +291,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
             require(_isBurnable, "Vault: not burnable");
 
             // check if settled
-            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+            require(oracle.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
             uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, product.isMaker);
             uint256 amount = balanceOf(_msgSender(), productId);
@@ -325,10 +324,10 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
 
     // withdraw fee
     function harvest() external {
-        require(totalFee > 0, "Vault: zero fee");
         uint256 fee = totalFee;
+        require(fee > 0, "Vault: zero fee");
         totalFee = 0;
-        COLLATERAL.safeTransfer(feeCollector, fee);
+        collateral.safeTransfer(feeCollector, fee);
 
         emit FeeCollected(_msgSender(), fee);
     }
@@ -345,12 +344,12 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
 
     function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        payoff = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
+        payoff = strategy.getMakerPayoff(anchorPrices, oracle.getHlPrices(term, expiry), maxPayoff);
     }
 
     function getMinterPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        uint256 payoffWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), maxPayoff);
+        uint256 payoffWithFee = strategy.getMinterPayoff(anchorPrices, oracle.getHlPrices(term, expiry), maxPayoff);
         fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoff = payoffWithFee - fee + (amount - amount * collateralAtRiskPercentage / 1e18);
     }
@@ -362,7 +361,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
 
     // get decimals
     function decimals() external view returns (uint8) {
-        return COLLATERAL.decimals();
+        return collateral.decimals();
     }
 
     // check if the product is burnable
@@ -380,7 +379,7 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
                 return (term, latestExpiry, false);
             } else {
                 uint256 latestTerm = term - termGap;
-                uint256[2] memory prices = ORACLE.getHlPrices(latestTerm, latestExpiry);
+                uint256[2] memory prices = oracle.getHlPrices(latestTerm, latestExpiry);
                 return(latestTerm, latestExpiry, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
             }
         }
