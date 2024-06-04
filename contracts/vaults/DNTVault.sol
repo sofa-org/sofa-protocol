@@ -2,7 +2,6 @@
 
 pragma solidity 0.8.10;
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
@@ -49,11 +48,11 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     string public name;
     string public symbol;
 
-    IWETH public WETH;
-    IPermit2 public PERMIT2;
-    IDNTStrategy public STRATEGY;
-    IERC20Metadata public COLLATERAL;
-    IHlOracle public ORACLE;
+    IWETH public weth;
+    IPermit2 public permit2;
+    IDNTStrategy public strategy;
+    IERC20Metadata public collateral;
+    IHlOracle public oracle;
 
     uint256 public totalFee;
     address public feeCollector;
@@ -65,7 +64,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     event FeeCollected(address collector, uint256 amount);
 
     modifier onlyETHVault() {
-        require(address(COLLATERAL) == address(WETH), "Vault: only ETH vault");
+        require(address(collateral) == address(weth), "Vault: only ETH vault");
         _;
     }
 
@@ -84,12 +83,12 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         name = name_;
         symbol = symbol_;
 
-        WETH = IWETH(weth_);
-        PERMIT2 = permit_;
-        STRATEGY = strategy_;
+        weth = IWETH(weth_);
+        permit2 = permit_;
+        strategy = strategy_;
 
-        COLLATERAL = IERC20Metadata(collateral_);
-        ORACLE = oracle_;
+        collateral = IERC20Metadata(collateral_);
+        oracle = oracle_;
 
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -115,19 +114,19 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         address referral
     ) external {
         // transfer collateral
-        uint256 collateral = totalCollateral - params.makerCollateral;
-        PERMIT2.permitTransferFrom(
+        uint256 depositAmount = totalCollateral - params.makerCollateral;
+        permit2.permitTransferFrom(
             IPermit2.PermitTransferFrom({
                 permitted: IPermit2.TokenPermissions({
-                    token: COLLATERAL,
-                    amount: collateral
+                    token: collateral,
+                    amount: depositAmount
                 }),
                 nonce: nonce,
                 deadline: params.deadline
             }),
             IPermit2.SignatureTransferDetails({
                 to: address(this),
-                requestedAmount: collateral
+                requestedAmount: depositAmount
             }),
             _msgSender(),
             minterPermitSignature
@@ -139,7 +138,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         MintParams calldata params,
         address referral
     ) external payable onlyETHVault {
-        WETH.deposit{value: msg.value}();
+        weth.deposit{value: msg.value}();
         _mint(
             params.makerCollateral + msg.value,
             params,
@@ -175,7 +174,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         consumeSignature(params.makerSignature);
 
         // transfer makercollateral
-        COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+        collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
 
         // trading fee
@@ -205,22 +204,22 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     ) external {
         require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
         // transfer collateral
-        uint256 collateral;
+        uint256 depositAmount;
         for (uint256 i = 0; i < paramsArray.length; i++) {
-            collateral += totalCollaterals[i] - paramsArray[i].makerCollateral;
+            depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
         }
-        PERMIT2.permitTransferFrom(
+        permit2.permitTransferFrom(
             IPermit2.PermitTransferFrom({
                 permitted: IPermit2.TokenPermissions({
-                    token: COLLATERAL,
-                    amount: collateral
+                    token: collateral,
+                    amount: depositAmount
                 }),
                 nonce: nonce,
                 deadline: deadline
             }),
             IPermit2.SignatureTransferDetails({
                 to: address(this),
-                requestedAmount: collateral
+                requestedAmount: depositAmount
             }),
             _msgSender(),
             minterPermitSignature
@@ -235,12 +234,12 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     ) external payable onlyETHVault {
         require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
         // transfer collateral
-        uint256 collateral;
+        uint256 depositAmount;
         for (uint256 i = 0; i < paramsArray.length; i++) {
-            collateral += totalCollaterals[i] - paramsArray[i].makerCollateral;
+            depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
         }
-        require(msg.value == collateral, "Vault: invalid msg.value");
-        WETH.deposit{value: msg.value}();
+        require(msg.value == depositAmount, "Vault: invalid msg.value");
+        weth.deposit{value: msg.value}();
 
         _mintBatch(totalCollaterals, paramsArray, referral);
     }
@@ -278,7 +277,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             consumeSignature(params.makerSignature);
 
             // transfer makercollateral
-            COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+            collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
             }
 
             // trading fee
@@ -304,14 +303,14 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function burn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external {
         uint256 payoff = _burn(term, expiry, anchorPrices, isMaker);
         if (payoff > 0) {
-            COLLATERAL.safeTransfer(_msgSender(), payoff);
+            collateral.safeTransfer(_msgSender(), payoff);
         }
     }
 
     function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(term, expiry, anchorPrices, isMaker);
         if (payoff > 0) {
-            WETH.withdraw(payoff);
+            weth.withdraw(payoff);
             (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
         }
@@ -322,7 +321,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         require(_isBurnable, "Vault: not burnable");
 
         // check if settled
-        require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+        require(oracle.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
         uint256 productId = getProductId(term, expiry, anchorPrices, isMaker);
         uint256 amount = balanceOf(_msgSender(), productId);
@@ -349,7 +348,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
 
         // check self balance of collateral and transfer payoff
         if (totalPayoff > 0) {
-            COLLATERAL.safeTransfer(_msgSender(), totalPayoff);
+            collateral.safeTransfer(_msgSender(), totalPayoff);
         }
     }
 
@@ -358,7 +357,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
 
         // check self balance of collateral and transfer payoff
         if (totalPayoff > 0) {
-            WETH.withdraw(totalPayoff);
+            weth.withdraw(totalPayoff);
             (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
         }
@@ -376,7 +375,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
             require(_isBurnable, "Vault: not burnable");
 
             // check if settled
-            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+            require(oracle.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
 
             uint256 productId = getProductId(product.term, product.expiry, product.anchorPrices, product.isMaker);
             uint256 amount = balanceOf(_msgSender(), productId);
@@ -409,20 +408,20 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
 
     // withdraw fee
     function harvest() external {
-        require(totalFee > 0, "Vault: zero fee");
         uint256 fee = totalFee;
+        require(fee > 0, "Vault: zero fee");
         totalFee = 0;
-        COLLATERAL.safeTransfer(feeCollector, fee);
+        collateral.safeTransfer(feeCollector, fee);
 
         emit FeeCollected(_msgSender(), fee);
     }
 
     function getMakerPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff) {
-        payoff = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), amount);
+        payoff = strategy.getMakerPayoff(anchorPrices, oracle.getHlPrices(term, expiry), amount);
     }
 
     function getMinterPayoff(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
-        uint256 payoffWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.getHlPrices(term, expiry), amount);
+        uint256 payoffWithFee = strategy.getMinterPayoff(anchorPrices, oracle.getHlPrices(term, expiry), amount);
         fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoff = payoffWithFee - fee;
     }
@@ -434,7 +433,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
 
     // get decimals
     function decimals() external view returns (uint8) {
-        return COLLATERAL.decimals();
+        return collateral.decimals();
     }
 
     // check if the product is burnable
@@ -452,7 +451,7 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
                 return (term, latestExpiry, false);
             } else {
                 uint256 latestTerm = term - termGap;
-                uint256[2] memory prices = ORACLE.getHlPrices(latestTerm, latestExpiry);
+                uint256[2] memory prices = oracle.getHlPrices(latestTerm, latestExpiry);
                 return(latestTerm, latestExpiry, prices[0] <= anchorPrices[0] || prices[1] >= anchorPrices[1]);
             }
         }

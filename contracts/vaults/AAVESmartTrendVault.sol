@@ -2,7 +2,6 @@
 
 pragma solidity 0.8.10;
 
-import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
@@ -59,13 +58,13 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     string public name;
     string public symbol;
 
-    IWETH public WETH;
-    IPermit2 public PERMIT2;
-    ISmartTrendStrategy public STRATEGY;
-    IERC20Metadata public COLLATERAL;
-    IPool public POOL;
-    IAToken public ATOKEN;
-    ISpotOracle public ORACLE;
+    IWETH public weth;
+    IPermit2 public permit2;
+    ISmartTrendStrategy public strategy;
+    IERC20Metadata public collateral;
+    IPool public pool;
+    IAToken public aToken;
+    ISpotOracle public oracle;
 
     uint256 totalSupply;
     uint256 public totalFee;
@@ -78,7 +77,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     event FeeCollected(address collector, uint256 amount);
 
     modifier onlyETHVault() {
-        require(address(COLLATERAL) == address(WETH), "Vault: only ETH vault");
+        require(address(collateral) == address(weth), "Vault: only ETH vault");
         _;
     }
 
@@ -98,15 +97,15 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         name = name_;
         symbol = symbol_;
 
-        WETH = IWETH(weth_);
-        PERMIT2 = permit_;
-        STRATEGY = strategy_;
+        weth = IWETH(weth_);
+        permit2 = permit_;
+        strategy = strategy_;
 
-        COLLATERAL = IERC20Metadata(collateral_);
-        ORACLE = oracle_;
+        collateral = IERC20Metadata(collateral_);
+        oracle = oracle_;
 
-        POOL = pool_;
-        ATOKEN = IAToken(pool_.getReserveData(address(collateral_)).aTokenAddress);
+        pool = pool_;
+        aToken = IAToken(pool_.getReserveData(address(collateral_)).aTokenAddress);
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 EIP712DOMAIN_TYPEHASH,
@@ -118,7 +117,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         );
         feeCollector = feeCollector_;
         // Approve once for max amount
-        COLLATERAL.safeApprove(address(pool_), type(uint256).max);
+        collateral.safeApprove(address(pool_), type(uint256).max);
 
         __Context_init();
         __ERC1155_init("");
@@ -133,19 +132,19 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         address referral
     ) external {
         // transfer collateral
-        uint256 collateral = totalCollateral - params.makerCollateral;
-        PERMIT2.permitTransferFrom(
+        uint256 depositAmount = totalCollateral - params.makerCollateral;
+        permit2.permitTransferFrom(
             IPermit2.PermitTransferFrom({
                 permitted: IPermit2.TokenPermissions({
-                    token: COLLATERAL,
-                    amount: collateral
+                    token: collateral,
+                    amount: depositAmount
                 }),
                 nonce: nonce,
                 deadline: params.deadline
             }),
             IPermit2.SignatureTransferDetails({
                 to: address(this),
-                requestedAmount: collateral
+                requestedAmount: depositAmount
             }),
             _msgSender(),
             minterPermitSignature
@@ -157,7 +156,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         MintParams calldata params,
         address referral
     ) external payable onlyETHVault {
-        WETH.deposit{value: msg.value}();
+        weth.deposit{value: msg.value}();
         _mint(
             params.makerCollateral + msg.value,
             params,
@@ -194,7 +193,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         consumeSignature(params.makerSignature);
 
         // transfer makerCollateral
-        COLLATERAL.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+        collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
 
 
@@ -204,8 +203,8 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         // calculate atoken shares
         {
         uint256 aTokenShare;
-        POOL.supply(address(COLLATERAL), totalCollateral, address(this), REFERRAL_CODE);
-        uint256 aTokenBalance = ATOKEN.balanceOf(address(this));
+        pool.supply(address(collateral), totalCollateral, address(this), REFERRAL_CODE);
+        uint256 aTokenBalance = aToken.balanceOf(address(this));
         if (totalSupply > 0) {
             aTokenShare = totalCollateral * totalSupply / (aTokenBalance - totalCollateral);
         } else {
@@ -232,14 +231,14 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     function burn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external {
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-           require(POOL.withdraw(address(COLLATERAL), payoff, _msgSender()) > 0, "Vault: withdraw failed");
+           require(pool.withdraw(address(collateral), payoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
     function ethBurn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-            require(POOL.withdraw(address(COLLATERAL), payoff, address(this)) > 0, "Vault: withdraw failed");
-            WETH.withdraw(payoff);
+            require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
+            weth.withdraw(payoff);
             (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
         }
@@ -252,7 +251,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         require(amount > 0, "Vault: zero amount");
 
         // check if settled
-        require(ORACLE.settlePrices(expiry) > 0, "Vault: not settled");
+        require(oracle.settlePrices(expiry) > 0, "Vault: not settled");
 
         // calculate payoff by strategy
         uint256 payoffShare;
@@ -268,7 +267,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
         // check self balance of collateral and transfer payoff
         if (payoffShare > 0) {
-            payoff = payoffShare * ATOKEN.balanceOf(address(this)) / totalSupply;
+            payoff = payoffShare * aToken.balanceOf(address(this)) / totalSupply;
             totalSupply -= payoffShare;
             emit Burned(_msgSender(), productId, amount, payoff);
         } else {
@@ -282,15 +281,15 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     function burnBatch(Product[] calldata products) external {
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
-            require(POOL.withdraw(address(COLLATERAL), totalPayoff, _msgSender()) > 0, "Vault: withdraw failed");
+            require(pool.withdraw(address(collateral), totalPayoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
 
     function ethBurnBatch(Product[] calldata products) external onlyETHVault {
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
-            require(POOL.withdraw(address(COLLATERAL), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
-            WETH.withdraw(totalPayoff);
+            require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
+            weth.withdraw(totalPayoff);
             (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
         }
@@ -301,7 +300,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
-        uint256 aTokenBalance = ATOKEN.balanceOf(address(this));
+        uint256 aTokenBalance = aToken.balanceOf(address(this));
         uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             Product memory product = products[i];
@@ -310,7 +309,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
             require(amount > 0, "Vault: zero amount");
             require(block.timestamp >= product.expiry, "Vault: not expired");
             // check if settled
-            require(ORACLE.settlePrices(product.expiry) > 0, "Vault: not settled");
+            require(oracle.settlePrices(product.expiry) > 0, "Vault: not settled");
             // calculate payoff by strategy
             uint256 payoffShare;
             if (product.isMaker == 1) {
@@ -346,24 +345,24 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
     // withdraw fee
     function harvest() external {
-        require(totalFee > 0, "Vault: zero fee");
         uint256 fee = totalFee;
+        require(fee > 0, "Vault: zero fee");
         totalFee = 0;
-        uint256 payoff = fee * ATOKEN.balanceOf(address(this)) / totalSupply;
+        uint256 payoff = fee * aToken.balanceOf(address(this)) / totalSupply;
         totalSupply -= fee;
-        require(POOL.withdraw(address(COLLATERAL), payoff, feeCollector) > 0, "Vault: withdraw failed");
+        require(pool.withdraw(address(collateral), payoff, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), payoff);
     }
 
     function getMakerPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        payoffShare = STRATEGY.getMakerPayoff(anchorPrices, ORACLE.settlePrices(expiry), maxPayoff);
+        payoffShare = strategy.getMakerPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff);
     }
 
     function getMinterPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoffShare, uint256 fee) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        uint256 payoffShareWithFee = STRATEGY.getMinterPayoff(anchorPrices, ORACLE.settlePrices(expiry), maxPayoff);
+        uint256 payoffShareWithFee = strategy.getMinterPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff);
         fee = payoffShareWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
         payoffShare = payoffShareWithFee - fee + (amount * 1e18 - amount * collateralAtRiskPercentage) / 1e18;
     }
@@ -375,7 +374,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
 
     // get decimals
     function decimals() external view returns (uint8) {
-        return COLLATERAL.decimals();
+        return collateral.decimals();
     }
 
     uint256[50] private __gap;

@@ -88,7 +88,7 @@ contract HlOracle is AutomationCompatibleInterface {
                 if (settlePrices[expiry][0] > 0 && settlePrices[expiry][0] < hlPrices[0]) {
                     hlPrices[0] = settlePrices[expiry][0];
                 }
-                if (settlePrices[expiry][1] > 0 && settlePrices[expiry][1] > hlPrices[1]) {
+                if (settlePrices[expiry][1] > hlPrices[1]) {
                     hlPrices[1] = settlePrices[expiry][1];
                 }
                 expiry = expiry - 86400;
