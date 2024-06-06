@@ -102,7 +102,7 @@ describe("ETHLeverageSmartTrendVault", function () {
       // Add your assertions here
       // Call burn function
       let balanceBefore = await ethers.provider.getBalance(minter.address);
-      await expect(vault.connect(minter).ethBurn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("71.051428899042500387"), parseEther("70.931428899042500387"));
+      await expect(vault.connect(minter).ethBurn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("71.051428899042500387"), parseEther("70.931428899042500388"));
       let balanceAfter = await ethers.provider.getBalance(minter.address);
       expect(balanceAfter.sub(balanceBefore)).to.above(parseEther("70.9313"));
       await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("71.051428899042500387"), 0);
@@ -124,7 +124,7 @@ describe("ETHLeverageSmartTrendVault", function () {
       expect(await vault.balanceOf(minter.address, minterProductId)).to.equal(parseEther("71.051428899042500387"));
       expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("71.051428899042500387"));
       balanceBefore = await ethers.provider.getBalance(minter.address);
-      await expect(vault.connect(minter).ethBurn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("71.051428899042500387"), parseEther("64.991428899042500403"));
+      await expect(vault.connect(minter).ethBurn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("71.051428899042500387"), parseEther("64.991428899042500404"));
       balanceAfter = await ethers.provider.getBalance(minter.address);
       expect(balanceAfter.sub(balanceBefore)).to.above(parseEther("64.99"));
       await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("71.051428899042500387"), parseEther("5.999999999999999984"));

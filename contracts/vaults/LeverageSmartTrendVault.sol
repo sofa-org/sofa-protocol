@@ -337,7 +337,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
         uint256 payoffWithFee = strategy.getMinterPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff);
         fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
-        payoff = payoffWithFee - fee + (amount * 1e18 - amount * collateralAtRiskPercentage) / 1e18;
+        payoff = payoffWithFee - fee + (amount - amount * collateralAtRiskPercentage / 1e18);
     }
 
     // get product id by parameters
