@@ -59,7 +59,7 @@ const config: HardhatUserConfig = {
       chainId: 1,
     },
     mainnet: {
-      url: process.env.MAINNET_URL || "",
+      url: process.env.MAINNET_RPC_URL || "",
       accounts:
         process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
     },
