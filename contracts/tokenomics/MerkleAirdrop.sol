@@ -88,7 +88,6 @@ contract MerkleAirdrop is Ownable {
     }
 
     function setMerkleRoot(uint256 index, bytes32 merkleRoot) external onlyOwner {
-        require(merkleRoots[index] == 0, "MerkleAirdrop: Merkle root already set.");
         merkleRoots[index] = merkleRoot;
     }
 }
