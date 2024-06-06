@@ -29,8 +29,8 @@ async function main() {
     // call: {
     //   fn: 'initialize',
     //   args: [
-    //     "Sofa USDT",
-    //     "sfUSDT",
+    //     "Reliable USDT",
+    //     "rUSDT",
     //     PERMIT2_ADDRESS,
     //     process.env.DNT_ADDRESS,
     //     process.env.WETH_ADDRESS,

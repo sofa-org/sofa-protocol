@@ -27,6 +27,13 @@ async function main() {
   );
   await oracle.deployed();
   console.log(`|HlOracle|${oracle.address}|`);
+
+  await hre.run("verify:verify", {
+    address: oracle.address,
+    constructorArguments: [
+      process.env.ETH_AUTO_FUNC_CONS_ADDRESS,
+    ],
+  });
 }
 
 // We recommend this pattern to be able to use async/await everywhere

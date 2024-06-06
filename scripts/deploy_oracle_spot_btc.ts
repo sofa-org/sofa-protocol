@@ -27,6 +27,13 @@ async function main() {
   );
   await oracle.deployed();
   console.log(`|SpotOracle|${oracle.address}|`);
+
+  await hre.run("verify:verify", {
+    address: oracle.address,
+    constructorArguments: [
+      process.env.BTC_AGGREGATOR_ADDRESS,
+    ],
+  });
 }
 
 // We recommend this pattern to be able to use async/await everywhere

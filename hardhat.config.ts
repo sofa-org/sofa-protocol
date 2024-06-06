@@ -58,6 +58,16 @@ const config: HardhatUserConfig = {
       },
       chainId: 1,
     },
+    mainnet: {
+      url: process.env.MAINNET_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
+    },
+    arbitrum: {
+      url: process.env.ARBITRUM_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY_ARBITRUM !== undefined ? [process.env.PRIVATE_KEY_ARBITRUM] : [],
+    },
     sepolia: {
       url: process.env.SEPOLIA_URL || "",
       accounts:
@@ -77,6 +87,7 @@ const config: HardhatUserConfig = {
     apiKey: {
       mainnet: process.env.ETHERSCAN_API_KEY,
       sepolia: process.env.ETHERSCAN_API_KEY,
+      arbitrumOne: process.env.ARBITRUMSCAN_API_KEY,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY,
     },
   },

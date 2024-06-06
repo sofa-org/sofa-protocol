@@ -23,14 +23,14 @@ async function main() {
   const gas = await ethers.provider.getGasPrice();
   const Vault = await ethers.getContractFactory("DNTVault");
   const vault = await upgrades.deployProxy(Vault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.DNT_ADDRESS,
     process.env.WETH_ADDRESS,
     process.env.USDT_ADDRESS,
     process.env.FEE_COLLECTOR_ADDRESS,
-    process.env.HL_ORACLE_BTC
+    process.env.HL_ORACLE_ETH
   ], {
     gasPrice: gas,
   });

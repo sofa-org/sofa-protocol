@@ -46,25 +46,25 @@ async function main() {
   // await vault.deployed();
   // console.log(`|SmartBullVault|${vault.address}|`);
 
-  // vault = await upgrades.deployProxy(Vault, [
-  //   "Sofa USDT",
-  //   "sfUSDT",
-  //   PERMIT2_ADDRESS,
-  //   process.env.SMARTBULL_ADDRESS,
-  //   process.env.WETH_ADDRESS,
-  //   process.env.USDT_ADDRESS,
-  //   process.env.FEE_COLLECTOR_ADDRESS,
-  //   process.env.SPOT_ORACLE_ETH
-  // ], {
-  //   gasPrice: gas,
-  // });
+  vault = await upgrades.deployProxy(Vault, [
+    "Reliable USDT",
+    "rUSDT",
+    PERMIT2_ADDRESS,
+    process.env.SMARTBULL_ADDRESS,
+    process.env.WETH_ADDRESS,
+    process.env.USDT_ADDRESS,
+    process.env.FEE_COLLECTOR_ADDRESS,
+    process.env.SPOT_ORACLE_ETH
+  ], {
+    gasPrice: gas,
+  });
 
-  // await vault.deployed();
-  // console.log(`|SmartBullVault(USDT)|${vault.address}|`);
+  await vault.deployed();
+  console.log(`|SmartBullVault(USDT)|${vault.address}|`);
 
-  // await hre.run("verify:verify", {
-  //   address: vault.address,
-  // });
+  await hre.run("verify:verify", {
+    address: vault.address,
+  });
   // vault = await upgrades.deployProxy(Vault, [
   //   "Sofa BTC",
   //   "sfBTC",
@@ -83,25 +83,25 @@ async function main() {
   // await vault.deployed();
   // console.log(`|SmartBullVault(WBTC)|${vault.address}|`);
 
-  // vault = await upgrades.deployProxy(Vault, [
-  //   "Sofa USDT",
-  //   "sfUSDT",
-  //   PERMIT2_ADDRESS,
-  //   process.env.SMARTBULL_ADDRESS,
-  //   process.env.WETH_ADDRESS,
-  //   process.env.USDT_ADDRESS,
-  //   process.env.FEE_COLLECTOR_ADDRESS,
-  //   process.env.SPOT_ORACLE_BTC
-  // ], {
-  //   gasPrice: gas,
-  // });
+  vault = await upgrades.deployProxy(Vault, [
+    "Reliable USDT",
+    "rUSDT",
+    PERMIT2_ADDRESS,
+    process.env.SMARTBULL_ADDRESS,
+    process.env.WETH_ADDRESS,
+    process.env.USDT_ADDRESS,
+    process.env.FEE_COLLECTOR_ADDRESS,
+    process.env.SPOT_ORACLE_BTC
+  ], {
+    gasPrice: gas,
+  });
 
-  // await vault.deployed();
-  // console.log(`|SmartBullVault(WBTC/USDT)|${vault.address}|`);
+  await vault.deployed();
+  console.log(`|SmartBullVault(WBTC/USDT)|${vault.address}|`);
 
-  // await hre.run("verify:verify", {
-  //   address: vault.address,
-  // });
+  await hre.run("verify:verify", {
+    address: vault.address,
+  });
   // vault = await upgrades.deployProxy(Vault, [
   //   "Sofa ETH",
   //   "sfETH",
@@ -121,8 +121,8 @@ async function main() {
   // console.log(`|SmartBearVault|${vault.address}|`);
 
   vault = await upgrades.deployProxy(Vault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.SMARTBEAR_ADDRESS,
     process.env.WETH_ADDRESS,
@@ -158,8 +158,8 @@ async function main() {
   // console.log(`|SmartBearVault(WBTC)|${vault.address}|`);
 
   vault = await upgrades.deployProxy(Vault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.SMARTBEAR_ADDRESS,
     process.env.WETH_ADDRESS,
@@ -195,8 +195,8 @@ async function main() {
   // console.log(`|SmartBullPrincipalVault|${principalVault.address}|`);
 
   aaveVault = await upgrades.deployProxy(AAVEVault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.SMARTBULL_ADDRESS,
     process.env.WETH_ADDRESS,
@@ -234,8 +234,8 @@ async function main() {
   // console.log(`|SmartBullPrincipalVault(WBTC)|${principalVault.address}|`);
 
   aaveVault = await upgrades.deployProxy(AAVEVault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.SMARTBULL_ADDRESS,
     process.env.WETH_ADDRESS,
@@ -273,8 +273,8 @@ async function main() {
   // console.log(`|SmartBearPrincipalVault|${principalVault.address}|`);
 
   aaveVault = await upgrades.deployProxy(AAVEVault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.SMARTBEAR_ADDRESS,
     process.env.WETH_ADDRESS,
@@ -312,8 +312,8 @@ async function main() {
   // console.log(`|SmartBearPrincipalVault(WBTC)|${principalVault.address}|`);
 
   aaveVault = await upgrades.deployProxy(AAVEVault, [
-    "Sofa USDT",
-    "sfUSDT",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.SMARTBEAR_ADDRESS,
     process.env.WETH_ADDRESS,

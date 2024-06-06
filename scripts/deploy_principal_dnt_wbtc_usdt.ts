@@ -23,8 +23,8 @@ async function main() {
   const gas = await ethers.provider.getGasPrice();
   const Vault = await ethers.getContractFactory("AAVEDNTVault");
   const vault = await upgrades.deployProxy(Vault, [
-    "Sofa BTC",
-    "sfBTC",
+    "Reliable USDT",
+    "rUSDT",
     PERMIT2_ADDRESS,
     process.env.DNT_ADDRESS,
     process.env.WETH_ADDRESS,
