@@ -165,7 +165,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         );
     }
 
-    function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal {
+    function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal nonReentrant {
         require(block.timestamp < params.deadline, "Vault: deadline");
         require(block.timestamp < params.expiry, "Vault: expired");
         // require expiry must be 8:00 UTC
