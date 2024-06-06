@@ -100,11 +100,8 @@ async function deployFixture() {
   );
   const FeeCollector = await ethers.getContractFactory("FeeCollector");
   const feeCollector = await FeeCollector.deploy(
-    governance.address,
     parseEther("0.01"), // Mock fee rate 1%
     parseEther("0.01"), // Mock fee rate 1%
-    UNI_ROUTERV2_ADDR,
-    UNI_ROUTERV3_ADDR
   );
   // mock atoken contract
   const AToken = await ethers.getContractFactory("MockATokenMintable");
