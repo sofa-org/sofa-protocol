@@ -193,6 +193,9 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - spreadFee);
         require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
 
+        pool.supply(address(collateral), totalCollateral, address(this), REFERRAL_CODE);
+        totalDeposit += totalCollateral - spreadFee;
+
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
