@@ -130,7 +130,6 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     function mint(
         uint256 totalCollateral,
         MintParams calldata params,
-        bytes calldata minterPermitSignature,
         address referral
     ) external {
         // transfer collateral
