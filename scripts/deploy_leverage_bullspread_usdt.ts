@@ -5,10 +5,6 @@
 // Runtime Environment's members available in the global scope.
 import * as dotenv from "dotenv";
 import { network, ethers, upgrades } from "hardhat";
-import {
-    PERMIT2_ADDRESS
-} from "@uniswap/permit2-sdk";
-
 
 dotenv.config({ path: `.env.${network.name}` });
 async function main() {
@@ -21,12 +17,12 @@ async function main() {
 
   // We get the contract to deploy
   const gas = await ethers.provider.getGasPrice();
-  const Vault = await ethers.getContractFactory("LeverageDNTVault");
+  const Vault = await ethers.getContractFactory("LeverageSmartTrendVault");
   const leverageRatio = 4;
   const vault = await upgrades.deployProxy(Vault, [
     "Reliable USDT",
     "rUSDT",
-    process.env.DNT_ADDRESS,
+    process.env.SMARTBULL_ADDRESS,
     process.env.WETH_ADDRESS,
     process.env.USDT_ADDRESS,
     process.env.AAVE_POOL_ADDRESS,
@@ -34,13 +30,13 @@ async function main() {
     ethers.utils.parseEther("0.08"),
     ethers.utils.parseEther("0"),
     leverageRatio,
-    process.env.HL_ORACLE_ETH
+    process.env.SPOT_ORACLE_ETH
   ], {
     gasPrice: gas,
   });
 
   await vault.deployed();
-  console.log(`|LeverageDNTVault(USDT)|${vault.address}|`);
+  console.log(`|LeverageBullSpreadVault(USDT)|${vault.address}|`);
 
   await hre.run("verify:verify", {
     address: vault.address,

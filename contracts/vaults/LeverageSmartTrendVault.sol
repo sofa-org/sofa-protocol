@@ -2,6 +2,7 @@
 
 pragma solidity 0.8.10;
 
+import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
@@ -10,11 +11,13 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
+import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
+import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
+import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
+import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
 import "../interfaces/IWETH.sol";
-import "../interfaces/IPermit2.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
-import "../interfaces/IFeeCollector.sol";
 import "../utils/SignatureBitMap.sol";
 
 contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
@@ -46,23 +49,25 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256[2] anchorPrices,uint256 collateralAtRisk,uint256 makerCollateral,uint256 deadline,address vault)"
     // );
     bytes32 public constant MINT_TYPEHASH = 0xbbb96bd81b8359e3021ab4bd0188b2fb99443a6debe51f7cb0a925a398f17117;
-    uint256 public constant LEVERAGE_RATIO = 9; // 9x
     uint256 internal constant APR_BASE = 1e18;
     uint256 internal constant SECONDS_IN_YEAR = 365 days;
+    uint16 private constant REFERRAL_CODE = 0;
 
     string public name;
     string public symbol;
 
     IWETH public weth;
-    IPermit2 public permit2;
     ISmartTrendStrategy public strategy;
     IERC20Metadata public collateral;
+    IPool public pool;
+    IAToken public aToken;
     ISpotOracle public oracle;
 
     uint256 public borrowAPR;
     uint256 public spreadAPR;
-    uint256 public totalFee;
+    uint256 public leverageRatio;
     address public feeCollector;
+    uint256 public totalDeposit;
 
     // Events
     event Minted(address minter, address maker, address referral, uint256 totalCollateral, uint256 expiry, uint256[2] anchorPrices, uint256 makerCollateral, uint256 collateralAtRiskPercentage);
@@ -80,25 +85,27 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     function initialize(
         string memory name_,
         string memory symbol_,
-        IPermit2 permit_,
         ISmartTrendStrategy strategy_,
         address weth_,
         address collateral_,
+        IPool pool_,
         address feeCollector_,
         uint256 borrowAPR_,
         uint256 spreadAPR_,
+        uint256 leverageRatio_,
         ISpotOracle oracle_
     ) initializer external {
         name = name_;
         symbol = symbol_;
 
         weth = IWETH(weth_);
-        permit2 = permit_;
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);
         oracle = oracle_;
 
+        pool = pool_;
+        aToken = IAToken(pool_.getReserveData(address(collateral_)).aTokenAddress);
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 EIP712DOMAIN_TYPEHASH,
@@ -109,8 +116,10 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
             )
         );
         feeCollector = feeCollector_;
+        collateral.safeApprove(address(pool_), type(uint256).max);
         borrowAPR = borrowAPR_;
         spreadAPR = spreadAPR_;
+        leverageRatio = leverageRatio_;
 
         __Context_init();
         __ERC1155_init("");
@@ -122,27 +131,11 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256 totalCollateral,
         MintParams calldata params,
         bytes calldata minterPermitSignature,
-        uint256 nonce,
         address referral
     ) external {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
-        permit2.permitTransferFrom(
-            IPermit2.PermitTransferFrom({
-                permitted: IPermit2.TokenPermissions({
-                    token: collateral,
-                    amount: depositAmount
-                }),
-                nonce: nonce,
-                deadline: params.deadline
-            }),
-            IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: depositAmount
-            }),
-            _msgSender(),
-            minterPermitSignature
-        );
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
         _mint(totalCollateral, params, referral);
     }
 
@@ -193,21 +186,19 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
 
         uint256 collateralAtRiskPercentage;
         {
-        // (totalCollateral - makerCollateral) = minterCollateral + minterCollateral * LEVERAGE_RATIO * borrowAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
-        uint256 minterCollateral = (totalCollateral - params.makerCollateral) * APR_BASE / (APR_BASE + LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
-        uint256 borrowFee = minterCollateral * LEVERAGE_RATIO * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
-        uint256 spreadFee = minterCollateral * LEVERAGE_RATIO * spreadAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
+        // (totalCollateral - makerCollateral) = minterCollateral + minterCollateral * leverageRatio * borrowAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
+        uint256 minterCollateral = (totalCollateral - params.makerCollateral) * APR_BASE / (APR_BASE + leverageRatio * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
+        uint256 borrowFee = minterCollateral * leverageRatio * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
+        uint256 spreadFee = minterCollateral * leverageRatio * spreadAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
         require(borrowFee - spreadFee >= params.collateralAtRisk - params.makerCollateral, "Vault: invalid collateral at risk");
-        uint256 tradingFee = (params.collateralAtRisk - params.makerCollateral) * IFeeCollector(feeCollector).tradingFeeRate()  / 1e18;
-        totalFee = totalFee + spreadFee + tradingFee;
-        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - tradingFee - spreadFee);
+        collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - spreadFee);
         require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
 
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(0));
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, collateralAtRiskPercentage, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral - tradingFee - spreadFee, "");
-        _mint(params.maker, makerProductId, totalCollateral - tradingFee - spreadFee, "");
+        _mint(_msgSender(), productId, totalCollateral - spreadFee, "");
+        _mint(params.maker, makerProductId, totalCollateral - spreadFee, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral, collateralAtRiskPercentage);
@@ -216,13 +207,14 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     function burn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external {
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
-            collateral.safeTransfer(_msgSender(), payoff);
+            require(pool.withdraw(address(collateral), payoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
 
     function ethBurn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
         uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
         if (payoff > 0) {
+            require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
             weth.withdraw(payoff);
             (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
@@ -242,28 +234,27 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         if (isMaker == 1) {
             payoff = getMakerPayoff(expiry, anchorPrices, collateralAtRiskPercentage, amount);
         } else {
-            uint256 settlementFee;
-            (payoff, settlementFee) = getMinterPayoff(expiry, anchorPrices, collateralAtRiskPercentage, amount);
-            if (settlementFee > 0) {
-                totalFee += settlementFee;
-            }
+            payoff = getMinterPayoff(expiry, anchorPrices, collateralAtRiskPercentage, amount);
         }
 
         // burn product
         _burn(_msgSender(), productId, amount);
         emit Burned(_msgSender(), productId, amount, payoff);
+
+        totalDeposit -= payoff;
     }
 
     function burnBatch(Product[] calldata products) external {
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
-            collateral.safeTransfer(_msgSender(), totalPayoff);
+            require(pool.withdraw(address(collateral), totalPayoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
 
     function ethBurnBatch(Product[] calldata products) external onlyETHVault {
         uint256 totalPayoff = _burnBatch(products);
         if (totalPayoff > 0) {
+            require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
             weth.withdraw(totalPayoff);
             (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
             require(success, "Failed to send ETH");
@@ -274,7 +265,6 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
-        uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             Product memory product = products[i];
             uint256 productId = getProductId(product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, product.isMaker);
@@ -287,11 +277,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
             if (product.isMaker == 1) {
                 payoffs[i] = getMakerPayoff(product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
             } else {
-                uint256 fee;
-                (payoffs[i], fee) = getMinterPayoff(product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
-                if (fee > 0) {
-                    settlementFee += fee;
-                }
+                payoffs[i] = getMinterPayoff(product.expiry, product.anchorPrices, product.collateralAtRiskPercentage, amount);
             }
             if (payoffs[i] > 0) {
                 totalPayoff += payoffs[i];
@@ -300,22 +286,25 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
             productIds[i] = productId;
             amounts[i] = amount;
         }
-        if (settlementFee > 0) {
-            totalFee += settlementFee;
-        }
+        
         // burn product
         _burnBatch(_msgSender(), productIds, amounts);
         emit BatchBurned(_msgSender(), productIds, amounts, payoffs);
+
+        totalDeposit -= totalPayoff;
     }
 
     // withdraw fee
     function harvest() external {
-        uint256 fee = totalFee;
+        uint256 fee = aToken.balanceOf(address(this)) - totalDeposit;
         require(fee > 0, "Vault: zero fee");
-        totalFee = 0;
-        collateral.safeTransfer(feeCollector, fee);
+        require(pool.withdraw(address(collateral), fee, feeCollector) > 0, "Vault: withdraw failed");
 
         emit FeeCollected(_msgSender(), fee);
+    }
+
+    function totalFee() external view returns (uint256) {
+       return aToken.balanceOf(address(this)) - totalDeposit;
     }
 
     // update borrowAPR
@@ -328,16 +317,19 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         spreadAPR = spreadAPR_;
     }
 
+    // update leverageRatio
+    function updateLeverageRatio(uint256 leverageRatio_) external onlyOwner {
+        leverageRatio = leverageRatio_;
+    }
+
     function getMakerPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
         payoff = strategy.getMakerPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff);
     }
 
-    function getMinterPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff, uint256 fee) {
+    function getMinterPayoff(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 amount) public view returns (uint256 payoff) {
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
-        uint256 payoffWithFee = strategy.getMinterPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff);
-        fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
-        payoff = payoffWithFee - fee + (amount - amount * collateralAtRiskPercentage / 1e18);
+        payoff = strategy.getMinterPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff) + (amount - amount * collateralAtRiskPercentage / 1e18);
     }
 
     // get product id by parameters

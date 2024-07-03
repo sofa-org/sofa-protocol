@@ -516,6 +516,71 @@ async function ethMintWithCollateralAtRisk(
   return { vault, collateral, maker, minter, collateralAtRiskPercentage };
 }
 
+async function leverageMint(
+  totalCollateral: string,
+  expiry: number,
+  anchorPrices: Array<string>,
+  collateralAtRisk: string,
+  makerCollateral: string,
+  deadline: number,
+  collateral: any,
+  vault: any,
+  minter: any,
+  maker: any,
+  referral: any,
+  eip721Domain: any
+) {
+  const makerSignatureTypes = { Mint: [
+    { name: 'minter', type: 'address' },
+    { name: 'totalCollateral', type: 'uint256' },
+    { name: 'expiry', type: 'uint256' },
+    { name: 'anchorPrices', type: 'uint256[2]' },
+    { name: 'collateralAtRisk', type: 'uint256' },
+    { name: 'makerCollateral', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+    { name: 'vault', type: 'address' },
+  ] };
+  const makerSignatureValues = {
+    minter: minter.address,
+    totalCollateral: totalCollateral,
+    expiry: expiry,
+    anchorPrices: anchorPrices,
+    collateralAtRisk: collateralAtRisk,
+    makerCollateral: makerCollateral,
+    deadline: deadline,
+    vault: vault.address,
+  };
+  const makerSignature = await maker._signTypedData(eip721Domain, makerSignatureTypes, makerSignatureValues);
+
+  // Call mint function
+  const tx = await vault
+    .connect(minter)
+  ['mint(uint256,(uint256,uint256[2],uint256,uint256,uint256,address,bytes),address)'](
+    totalCollateral,
+    {
+      expiry: expiry,
+      anchorPrices: anchorPrices,
+      collateralAtRisk: collateralAtRisk,
+      makerCollateral: makerCollateral,
+      deadline: deadline,
+      maker: maker.address,
+      makerSignature: makerSignature
+    },
+    referral.address,
+  );
+  let receipt = await tx.wait();
+  let collateralAtRiskPercentage;
+
+  for (const event of receipt.events) {
+    if (event.event === 'Minted') {
+      collateralAtRiskPercentage = event.args.collateralAtRiskPercentage;
+      break;
+    }
+  }
+
+  return { vault, collateral, maker, minter, collateralAtRiskPercentage };
+}
+
 module.exports = {
   PERMIT2_ADDRESS,
   expect,
@@ -528,6 +593,7 @@ module.exports = {
   ethMintBatch,
   mintWithCollateralAtRisk,
   ethMintWithCollateralAtRisk,
+  leverageMint,
   parseEther,
   keccak256, solidityKeccak256, solidityPack, toUtf8Bytes
 };
