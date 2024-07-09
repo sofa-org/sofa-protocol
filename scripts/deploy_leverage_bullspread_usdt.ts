@@ -27,8 +27,8 @@ async function main() {
     process.env.USDT_ADDRESS,
     process.env.AAVE_POOL_ADDRESS,
     process.env.FEE_COLLECTOR_ADDRESS,
-    ethers.utils.parseEther("0.08"),
-    ethers.utils.parseEther("0"),
+    ethers.utils.parseEther("0.03"),
+    ethers.utils.parseEther("0.01"),
     leverageRatio,
     process.env.SPOT_ORACLE_ETH
   ], {
@@ -38,9 +38,9 @@ async function main() {
   await vault.deployed();
   console.log(`|LeverageBullSpreadVault(USDT)|${vault.address}|`);
 
-  await hre.run("verify:verify", {
-    address: vault.address,
-  });
+  // await hre.run("verify:verify", {
+  //   address: vault.address,
+  // });
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -22,17 +22,18 @@ async function main() {
   // We get the contract to deploy
   const gas = await ethers.provider.getGasPrice();
   const Vault = await ethers.getContractFactory("LeverageDNTVault");
+  const leverageRatio = 4;
   const vault = await upgrades.deployProxy(Vault, [
-    "Sofa BTC",
-    "sfBTC",
-    PERMIT2_ADDRESS,
+    "Reliable USDT",
+    "rUSDT",
     process.env.DNT_ADDRESS,
     process.env.WETH_ADDRESS,
     process.env.USDT_ADDRESS,
-    process.env.RCH_ADDRESS,
-    process.env.UNI_ROUTERV2_ADDRESS,
+    process.env.AAVE_POOL_ADDRESS,
+    process.env.FEE_COLLECTOR_ADDRESS,
+    ethers.utils.parseEther("0.03"),
     ethers.utils.parseEther("0.01"),
-    ethers.utils.parseEther("0.1"),
+    leverageRatio,
     process.env.HL_ORACLE_BTC
   ], {
     gasPrice: gas,

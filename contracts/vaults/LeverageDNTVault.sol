@@ -75,10 +75,10 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] payoffs);
     event FeeCollected(address collector, uint256 amount);
 
-    modifier onlyETHVault() {
-        require(address(collateral) == address(weth), "Vault: only ETH vault");
-        _;
-    }
+    // modifier onlyETHVault() {
+    //     require(address(collateral) == address(weth), "Vault: only ETH vault");
+    //     _;
+    // }
 
     receive() external payable {}
 
@@ -138,17 +138,17 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         _mint(totalCollateral, params, referral);
     }
 
-    function mint(
-        MintParams calldata params,
-        address referral
-    ) external payable onlyETHVault {
-        weth.deposit{value: msg.value}();
-        _mint(
-            params.makerCollateral + msg.value,
-            params,
-            referral
-        );
-    }
+    // function mint(
+    //     MintParams calldata params,
+    //     address referral
+    // ) external payable onlyETHVault {
+    //     weth.deposit{value: msg.value}();
+    //     _mint(
+    //         params.makerCollateral + msg.value,
+    //         params,
+    //         referral
+    //     );
+    // }
 
     function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal {
         require(block.timestamp < params.deadline, "Vault: deadline");
@@ -216,15 +216,15 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         }
     }
 
-    function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
-        uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
-        if (payoff > 0) {
-            require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
-            weth.withdraw(payoff);
-            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
-            require(success, "Failed to send ETH");
-        }
-    }
+    // function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
+    //     uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
+    //     if (payoff > 0) {
+    //         require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
+    //         weth.withdraw(payoff);
+    //         (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+    //         require(success, "Failed to send ETH");
+    //     }
+    // }
 
     function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
         require(expiry <= block.timestamp || isMaker == 1, "Vault: not expired");
@@ -261,16 +261,16 @@ contract LeverageDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeab
         }
     }
 
-    function ethBurnBatch(Product[] calldata products) external onlyETHVault {
-       uint256 totalPayoff = _burnBatch(products);
+    // function ethBurnBatch(Product[] calldata products) external onlyETHVault {
+    //    uint256 totalPayoff = _burnBatch(products);
 
-       if (totalPayoff > 0) {
-           require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
-           weth.withdraw(totalPayoff);
-           (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
-           require(success, "Failed to send ETH");
-       }
-    }
+    //    if (totalPayoff > 0) {
+    //        require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
+    //        weth.withdraw(totalPayoff);
+    //        (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+    //        require(success, "Failed to send ETH");
+    //    }
+    // }
 
     function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalPayoff) {
         uint256[] memory productIds = new uint256[](products.length);
