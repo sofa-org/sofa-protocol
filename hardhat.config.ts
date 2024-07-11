@@ -54,9 +54,19 @@ const config: HardhatUserConfig = {
       forking: {
         enabled: true,
         url: process.env.MAINNET_RPC_URL as string,
-        blockNumber: 17613241,
+        // blockNumber: 17613241,
       },
       chainId: 1,
+    },
+    mainnet: {
+      url: process.env.MAINNET_RPC_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
+    },
+    arbitrum: {
+      url: process.env.ARBITRUM_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY_ARBITRUM !== undefined ? [process.env.PRIVATE_KEY_ARBITRUM] : [],
     },
     sepolia: {
       url: process.env.SEPOLIA_URL || "",
@@ -77,6 +87,7 @@ const config: HardhatUserConfig = {
     apiKey: {
       mainnet: process.env.ETHERSCAN_API_KEY,
       sepolia: process.env.ETHERSCAN_API_KEY,
+      arbitrumOne: process.env.ARBITRUMSCAN_API_KEY,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY,
     },
   },
