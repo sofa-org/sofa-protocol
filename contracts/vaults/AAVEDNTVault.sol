@@ -14,7 +14,6 @@ import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTy
 import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
 import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
 import "../interfaces/IWETH.sol";
-import "../interfaces/IPermit2.sol";
 import "../interfaces/IDNTStrategy.sol";
 import "../interfaces/IHlOracle.sol";
 import "../interfaces/IFeeCollector.sol";
@@ -60,7 +59,6 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     string public symbol;
 
     IWETH public weth;
-    IPermit2 public permit2;
     IDNTStrategy public strategy;
     IERC20Metadata public collateral;
     IPool public pool;
@@ -77,17 +75,16 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] payoffs);
     event FeeCollected(address collector, uint256 amount);
 
-    modifier onlyETHVault() {
-        require(address(collateral) == address(weth), "Vault: only ETH vault");
-        _;
-    }
+    // modifier onlyETHVault() {
+    //     require(address(collateral) == address(weth), "Vault: only ETH vault");
+    //     _;
+    // }
 
     receive() external payable {}
 
     function initialize(
         string memory name_,
         string memory symbol_,
-        IPermit2 permit_,
         IDNTStrategy strategy_,
         address weth_,
         address collateral_,
@@ -99,7 +96,6 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         symbol = symbol_;
 
         weth = IWETH(weth_);
-        permit2 = permit_;
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);
@@ -128,42 +124,25 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     function mint(
         uint256 totalCollateral,
         MintParams calldata params,
-        bytes calldata minterPermitSignature,
-        uint256 nonce,
         address referral
     ) external {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
-        permit2.permitTransferFrom(
-            IPermit2.PermitTransferFrom({
-                permitted: IPermit2.TokenPermissions({
-                    token: collateral,
-                    amount: depositAmount
-                }),
-                nonce: nonce,
-                deadline: params.deadline
-            }),
-            IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: depositAmount
-            }),
-            _msgSender(),
-            minterPermitSignature
-        );
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
         _mint(totalCollateral, params, referral);
     }
 
-    function mint(
-        MintParams calldata params,
-        address referral
-    ) external payable onlyETHVault {
-        weth.deposit{value: msg.value}();
-        _mint(
-            params.makerCollateral + msg.value,
-            params,
-            referral
-        );
-    }
+    // function mint(
+    //     MintParams calldata params,
+    //     address referral
+    // ) external payable onlyETHVault {
+    //     weth.deposit{value: msg.value}();
+    //     _mint(
+    //         params.makerCollateral + msg.value,
+    //         params,
+    //         referral
+    //     );
+    // }
 
     function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal nonReentrant {
         require(block.timestamp < params.deadline, "Vault: deadline");
@@ -237,17 +216,19 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         }
     }
 
-    function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
-        uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
-        if (payoff > 0) {
-            require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
-            weth.withdraw(payoff);
-            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
-            require(success, "Failed to send ETH");
-        }
-    }
+    // function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
+    //     uint256 payoff = _burn(term, expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
+    //     if (payoff > 0) {
+    //         require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
+    //         weth.withdraw(payoff);
+    //         (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+    //         require(success, "Failed to send ETH");
+    //     }
+    // }
 
     function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
+        require(expiry <= block.timestamp || isMaker == 1, "Vault: not expired");
+
         (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
         require(_isBurnable, "Vault: not burnable");
 
@@ -290,15 +271,15 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         }
     }
 
-    function ethBurnBatch(Product[] calldata products) external onlyETHVault {
-       uint256 totalPayoff = _burnBatch(products);
-       if (totalPayoff > 0) {
-           require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
-           weth.withdraw(totalPayoff);
-           (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
-           require(success, "Failed to send ETH");
-       }
-    }
+    // function ethBurnBatch(Product[] calldata products) external onlyETHVault {
+    //    uint256 totalPayoff = _burnBatch(products);
+    //    if (totalPayoff > 0) {
+    //        require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
+    //        weth.withdraw(totalPayoff);
+    //        (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+    //        require(success, "Failed to send ETH");
+    //    }
+    // }
 
     function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalPayoff) {
         uint256 totalPayoffShare = 0;
@@ -310,6 +291,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
         for (uint256 i = 0; i < products.length; i++) {
             Product memory product = products[i];
 
+            require(product.expiry <= block.timestamp || product.isMaker == 1, "Vault: not expired");
             (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(product.term, product.expiry, product.anchorPrices);
             require(_isBurnable, "Vault: not burnable");
 
