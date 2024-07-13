@@ -64,7 +64,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     IAToken public aToken;
     ISpotOracle public oracle;
 
-    uint256 totalSupply;
+    uint256 public totalSupply;
     uint256 public totalFee;
     address public feeCollector;
 

@@ -65,7 +65,7 @@ contract AAVEDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, 
     IAToken public aToken;
     IHlOracle public oracle;
 
-    uint256 totalSupply;
+    uint256 public totalSupply;
     uint256 public totalFee;
     address public feeCollector;
 
