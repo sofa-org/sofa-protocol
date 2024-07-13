@@ -14,7 +14,6 @@ import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTy
 import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
 import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
 import "../interfaces/IWETH.sol";
-import "../interfaces/IPermit2.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
@@ -59,14 +58,13 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     string public symbol;
 
     IWETH public weth;
-    IPermit2 public permit2;
     ISmartTrendStrategy public strategy;
     IERC20Metadata public collateral;
     IPool public pool;
     IAToken public aToken;
     ISpotOracle public oracle;
 
-    uint256 totalSupply;
+    uint256 public totalSupply;
     uint256 public totalFee;
     address public feeCollector;
 
@@ -86,7 +84,6 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     function initialize(
         string memory name_,
         string memory symbol_,
-        IPermit2 permit_,
         ISmartTrendStrategy strategy_,
         address weth_,
         address collateral_,
@@ -98,7 +95,6 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         symbol = symbol_;
 
         weth = IWETH(weth_);
-        permit2 = permit_;
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);
@@ -127,42 +123,25 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     function mint(
         uint256 totalCollateral,
         MintParams calldata params,
-        bytes calldata minterPermitSignature,
-        uint256 nonce,
         address referral
     ) external {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
-        permit2.permitTransferFrom(
-            IPermit2.PermitTransferFrom({
-                permitted: IPermit2.TokenPermissions({
-                    token: collateral,
-                    amount: depositAmount
-                }),
-                nonce: nonce,
-                deadline: params.deadline
-            }),
-            IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: depositAmount
-            }),
-            _msgSender(),
-            minterPermitSignature
-        );
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
         _mint(totalCollateral, params, referral);
     }
 
-    function mint(
-        MintParams calldata params,
-        address referral
-    ) external payable onlyETHVault {
-        weth.deposit{value: msg.value}();
-        _mint(
-            params.makerCollateral + msg.value,
-            params,
-            referral
-        );
-    }
+    // function mint(
+    //     MintParams calldata params,
+    //     address referral
+    // ) external payable onlyETHVault {
+    //     weth.deposit{value: msg.value}();
+    //     _mint(
+    //         params.makerCollateral + msg.value,
+    //         params,
+    //         referral
+    //     );
+    // }
 
     function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal nonReentrant {
         require(block.timestamp < params.deadline, "Vault: deadline");
@@ -234,15 +213,15 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
            require(pool.withdraw(address(collateral), payoff, _msgSender()) > 0, "Vault: withdraw failed");
         }
     }
-    function ethBurn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
-        uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
-        if (payoff > 0) {
-            require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
-            weth.withdraw(payoff);
-            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
-            require(success, "Failed to send ETH");
-        }
-    }
+    // function ethBurn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external onlyETHVault {
+    //     uint256 payoff = _burn(expiry, anchorPrices, collateralAtRiskPercentage, isMaker);
+    //     if (payoff > 0) {
+    //         require(pool.withdraw(address(collateral), payoff, address(this)) > 0, "Vault: withdraw failed");
+    //         weth.withdraw(payoff);
+    //         (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+    //         require(success, "Failed to send ETH");
+    //     }
+    // }
 
     function _burn(uint256 expiry, uint256[2] memory anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
         require(block.timestamp >= expiry, "Vault: not expired");
@@ -285,15 +264,15 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         }
     }
 
-    function ethBurnBatch(Product[] calldata products) external onlyETHVault {
-        uint256 totalPayoff = _burnBatch(products);
-        if (totalPayoff > 0) {
-            require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
-            weth.withdraw(totalPayoff);
-            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
-            require(success, "Failed to send ETH");
-        }
-    }
+    // function ethBurnBatch(Product[] calldata products) external onlyETHVault {
+    //     uint256 totalPayoff = _burnBatch(products);
+    //     if (totalPayoff > 0) {
+    //         require(pool.withdraw(address(collateral), totalPayoff, address(this)) > 0, "Vault: withdraw failed");
+    //         weth.withdraw(totalPayoff);
+    //         (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+    //         require(success, "Failed to send ETH");
+    //     }
+    // }
 
     function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalPayoff) {
         uint256 totalPayoffShare = 0;

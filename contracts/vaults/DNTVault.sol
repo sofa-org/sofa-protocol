@@ -10,7 +10,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../interfaces/IWETH.sol";
-import "../interfaces/IPermit2.sol";
 import "../interfaces/IDNTStrategy.sol";
 import "../interfaces/IHlOracle.sol";
 import "../interfaces/IFeeCollector.sol";
@@ -49,7 +48,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     string public symbol;
 
     IWETH public weth;
-    IPermit2 public permit2;
     IDNTStrategy public strategy;
     IERC20Metadata public collateral;
     IHlOracle public oracle;
@@ -73,7 +71,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function initialize(
         string memory name_,
         string memory symbol_,
-        IPermit2 permit_,
         IDNTStrategy strategy_,
         address weth_,
         address collateral_,
@@ -84,7 +81,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         symbol = symbol_;
 
         weth = IWETH(weth_);
-        permit2 = permit_;
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);
@@ -109,42 +105,25 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function mint(
         uint256 totalCollateral,
         MintParams calldata params,
-        bytes calldata minterPermitSignature,
-        uint256 nonce,
         address referral
     ) external {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
-        permit2.permitTransferFrom(
-            IPermit2.PermitTransferFrom({
-                permitted: IPermit2.TokenPermissions({
-                    token: collateral,
-                    amount: depositAmount
-                }),
-                nonce: nonce,
-                deadline: params.deadline
-            }),
-            IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: depositAmount
-            }),
-            _msgSender(),
-            minterPermitSignature
-        );
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
         _mint(totalCollateral, params, referral);
     }
 
-    function mint(
-        MintParams calldata params,
-        address referral
-    ) external payable onlyETHVault {
-        weth.deposit{value: msg.value}();
-        _mint(
-            params.makerCollateral + msg.value,
-            params,
-            referral
-        );
-    }
+    // function mint(
+    //     MintParams calldata params,
+    //     address referral
+    // ) external payable onlyETHVault {
+    //     weth.deposit{value: msg.value}();
+    //     _mint(
+    //         params.makerCollateral + msg.value,
+    //         params,
+    //         referral
+    //     );
+    // }
 
     function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal {
         require(block.timestamp < params.deadline, "Vault: deadline");
@@ -197,9 +176,6 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     function mintBatch(
         uint256[] calldata totalCollaterals,
         MintParams[] calldata paramsArray,
-        bytes calldata minterPermitSignature,
-        uint256 nonce,
-        uint256 deadline,
         address referral
     ) external {
         require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
@@ -208,41 +184,26 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         for (uint256 i = 0; i < paramsArray.length; i++) {
             depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
         }
-        permit2.permitTransferFrom(
-            IPermit2.PermitTransferFrom({
-                permitted: IPermit2.TokenPermissions({
-                    token: collateral,
-                    amount: depositAmount
-                }),
-                nonce: nonce,
-                deadline: deadline
-            }),
-            IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: depositAmount
-            }),
-            _msgSender(),
-            minterPermitSignature
-        );
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
         _mintBatch(totalCollaterals, paramsArray, referral);
     }
 
-    function mintBatch(
-        uint256[] calldata totalCollaterals,
-        MintParams[] calldata paramsArray,
-        address referral
-    ) external payable onlyETHVault {
-        require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
-        // transfer collateral
-        uint256 depositAmount;
-        for (uint256 i = 0; i < paramsArray.length; i++) {
-            depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
-        }
-        require(msg.value == depositAmount, "Vault: invalid msg.value");
-        weth.deposit{value: msg.value}();
+    // function mintBatch(
+    //     uint256[] calldata totalCollaterals,
+    //     MintParams[] calldata paramsArray,
+    //     address referral
+    // ) external payable onlyETHVault {
+    //     require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
+    //     // transfer collateral
+    //     uint256 depositAmount;
+    //     for (uint256 i = 0; i < paramsArray.length; i++) {
+    //         depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
+    //     }
+    //     require(msg.value == depositAmount, "Vault: invalid msg.value");
+    //     weth.deposit{value: msg.value}();
 
-        _mintBatch(totalCollaterals, paramsArray, referral);
-    }
+    //     _mintBatch(totalCollaterals, paramsArray, referral);
+    // }
 
     function _mintBatch(uint256[] memory totalCollaterals, MintParams[] memory paramsArray, address referral) internal {
         require(referral != _msgSender(), "Vault: invalid referral");
@@ -307,14 +268,14 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         }
     }
 
-    function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external onlyETHVault {
-        uint256 payoff = _burn(term, expiry, anchorPrices, isMaker);
-        if (payoff > 0) {
-            weth.withdraw(payoff);
-            (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
-            require(success, "Failed to send ETH");
-        }
-    }
+    // function ethBurn(uint256 term, uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external onlyETHVault {
+    //     uint256 payoff = _burn(term, expiry, anchorPrices, isMaker);
+    //     if (payoff > 0) {
+    //         weth.withdraw(payoff);
+    //         (bool success, ) = _msgSender().call{value: payoff, gas: 100_000}("");
+    //         require(success, "Failed to send ETH");
+    //     }
+    // }
 
     function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
         (uint256 latestTerm, uint256 latestExpiry, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
@@ -352,16 +313,16 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
         }
     }
 
-    function ethBurnBatch(Product[] calldata products) external onlyETHVault {
-        uint256 totalPayoff = _burnBatch(products);
+    // function ethBurnBatch(Product[] calldata products) external onlyETHVault {
+    //     uint256 totalPayoff = _burnBatch(products);
 
-        // check self balance of collateral and transfer payoff
-        if (totalPayoff > 0) {
-            weth.withdraw(totalPayoff);
-            (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
-            require(success, "Failed to send ETH");
-        }
-    }
+    //     // check self balance of collateral and transfer payoff
+    //     if (totalPayoff > 0) {
+    //         weth.withdraw(totalPayoff);
+    //         (bool success, ) = _msgSender().call{value: totalPayoff, gas: 100_000}("");
+    //         require(success, "Failed to send ETH");
+    //     }
+    // }
 
     function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalPayoff) {
         uint256[] memory productIds = new uint256[](products.length);

@@ -9,7 +9,7 @@ import {
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import bn from 'bignumber.js';
 const { parseEther, keccak256, solidityKeccak256, solidityPack, toUtf8Bytes } = ethers.utils;
-import { mint } from "../helpers/helpers";
+import { mintWithoutPermit as mint } from "../helpers/helpers";
 
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 })
 
@@ -173,7 +173,6 @@ describe("FeeCollector", function () {
     const vault = await upgrades.deployProxy(Vault, [
       "Sofa ETH",
       "sfETH",
-      PERMIT2_ADDRESS, // Mock permit contract
       strategy.address, // Mock strategy contract
       weth.address, // Mock weth contract
       collateral.address,
@@ -186,6 +185,7 @@ describe("FeeCollector", function () {
       chainId: 1,
       verifyingContract: vault.address,
     };
+    await collateral.connect(minter).approve(vault.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
 
     return { vault, collateral, feeCollector, weth, rch, uniRouterV2, aggregator, oracle, referral, maker, minter, eip721Domain, nft, uniRouterV3 };
@@ -226,9 +226,8 @@ describe("FeeCollector", function () {
     let anchorPrices = [parseEther("28000"), parseEther("30000")];
     const makerCollateral = parseEther("10");
     let deadline = await time.latest() + 600;
-    let minterNonce = await time.latest();
 
-    await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+    await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
     // Test variables
     let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
@@ -262,9 +261,8 @@ describe("FeeCollector", function () {
     let anchorPrices = [parseEther("28000"), parseEther("30000")];
     const makerCollateral = parseEther("10");
     let deadline = await time.latest() + 600;
-    let minterNonce = await time.latest();
 
-    await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+    await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
     // Test variables
     let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;

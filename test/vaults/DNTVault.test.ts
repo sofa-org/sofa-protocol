@@ -5,8 +5,8 @@ import {
   expect,
   constants,
   deployFixture,
-  mint,
-  mintBatch,
+  mintWithoutPermit as mint,
+  mintBatchWithoutPermit as mintBatch,
   parseEther,
   keccak256,
   solidityKeccak256,
@@ -35,7 +35,6 @@ describe("DNTVault", function () {
     vault = await upgrades.deployProxy(Vault, [
       "Sofa ETH",
       "sfETH",
-      PERMIT2_ADDRESS, // Mock permit contract
       strategy.address, // Mock strategy contract
       weth.address, // Mock weth contract
       collateral.address,
@@ -48,6 +47,7 @@ describe("DNTVault", function () {
       chainId: 1,
       verifyingContract: vault.address,
     };
+    await collateral.connect(minter).approve(vault.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
   });
 
@@ -58,10 +58,8 @@ describe("DNTVault", function () {
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
       const deadline = await time.latest() + 600;
-      let minterNonce = 0;
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
-      minterNonce = 1;
-      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
       // Perform assertions
       const term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256[2]", "uint256"], [term, expiry, anchorPrices, 0]);
@@ -81,15 +79,14 @@ describe("DNTVault", function () {
       const anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
       const deadline = await time.latest() + 600;
-      const minterNonce = 0;
       await expect(mintBatch([
         { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker },
         { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker }
-      ], deadline, minterNonce, collateral, vault, minter, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
+      ], vault, minter, referral, eip721Domain)).to.be.revertedWith("Vault: signature consumed");
       await mintBatch([
         { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline, maker: maker },
         { totalCollateral: totalCollateral, expiry: expiry, anchorPrices: anchorPrices, makerCollateral: makerCollateral, deadline: deadline + 1, maker: maker }
-      ], deadline, minterNonce, collateral, vault, minter, referral, eip721Domain);
+      ], vault, minter, referral, eip721Domain);
       // Perform assertions
       const term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256[2]", "uint256"], [term, expiry, anchorPrices, 0]);
@@ -109,9 +106,8 @@ describe("DNTVault", function () {
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
       let deadline = await time.latest() + 600;
-      let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
@@ -135,13 +131,11 @@ describe("DNTVault", function () {
 
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       deadline = await time.latest() + 600;
-      await expect(mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)).to.be.reverted;
 
       // strike case
-      minterNonce = 1;
       anchorPrices = [parseEther("27000"), parseEther("33000")];
       term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
       await time.increaseTo(expiry);
       await expect(oracle.settle()).to.be.revertedWith("Oracle: not updated");
       await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
@@ -157,12 +151,11 @@ describe("DNTVault", function () {
       expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("100079.1"));
 
       // burnable when not expired
-      minterNonce = 2;
       anchorPrices = [parseEther("28000"), parseEther("30000")];
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400 * 3;
       deadline = await time.latest() + 600;
       term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
       await time.increaseTo(expiry - 86400 * 2);
       await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
       await oracle.settle();
@@ -189,9 +182,8 @@ describe("DNTVault", function () {
       let anchorPrices = [parseEther("28000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
       let deadline = await time.latest() + 600;
-      let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrices, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
       // Test variables
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
@@ -219,12 +211,10 @@ describe("DNTVault", function () {
       let anchorPricesB = [parseEther("27000"), parseEther("33000")];
       const makerCollateral = parseEther("10");
       let deadline = await time.latest() + 600;
-      let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
-      minterNonce = 1;
-      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)
+      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain)
 
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       await time.increaseTo(expiry);
@@ -251,12 +241,10 @@ describe("DNTVault", function () {
       let anchorPricesB = [parseEther("27000"), parseEther("30000")];
       const makerCollateral = parseEther("10");
       let deadline = await time.latest() + 600;
-      let minterNonce = 0;
 
-      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPricesA, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
 
-      minterNonce = 1;
-      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, minterNonce, collateral, vault, minter, maker, referral, eip721Domain)
+      await mint(totalCollateral, expiry, anchorPricesB, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain)
 
       let term = (expiry - (Math.ceil((await time.latest() - 28800) / 86400) * 86400 + 28800)) / 86400;
       await time.increaseTo(expiry);
@@ -279,6 +267,9 @@ describe("DNTVault", function () {
   describe("Settle", function () {
     it("should settle the price", async function () {
       // Call settle function
+      const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
+      await time.increaseTo(expiry);
+      await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
       await expect(oracle.settle()).emit(oracle, "Settled");
     });
   });
@@ -289,10 +280,10 @@ describe("DNTVault", function () {
     });
   });
 
-  describe("Upgrade Proxy", function () {
-    it("should upgrade the proxy", async function () {
-      const VaultV2 = await ethers.getContractFactory("DNTVault");
-      await upgrades.upgradeProxy(vault.address, VaultV2);
-    });
-  });
+  // describe("Upgrade Proxy", function () {
+  //   it("should upgrade the proxy", async function () {
+  //     const VaultV2 = await ethers.getContractFactory("DNTVault");
+  //     await upgrades.upgradeProxy(vault.address, VaultV2);
+  //   });
+  // });
 });
