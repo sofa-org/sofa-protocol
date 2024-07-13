@@ -194,6 +194,58 @@ async function mint(
   return { vault, collateral, maker, minter };
 }
 
+async function mintWithoutPermit(
+  totalCollateral: string,
+  expiry: number,
+  anchorPrices: Array<string>,
+  makerCollateral: string,
+  deadline: number,
+  collateral: any,
+  vault: any,
+  minter: any,
+  maker: any,
+  referral: any,
+  eip721Domain: any
+) {
+  const makerSignatureTypes = { Mint: [
+    { name: 'minter', type: 'address' },
+    { name: 'totalCollateral', type: 'uint256' },
+    { name: 'expiry', type: 'uint256' },
+    { name: 'anchorPrices', type: 'uint256[2]' },
+    { name: 'makerCollateral', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+    { name: 'vault', type: 'address' },
+  ] };
+  const makerSignatureValues = {
+    minter: minter.address,
+    totalCollateral: totalCollateral,
+    expiry: expiry,
+    anchorPrices: anchorPrices,
+    makerCollateral: makerCollateral,
+    deadline: deadline,
+    vault: vault.address,
+  };
+  const makerSignature = await maker._signTypedData(eip721Domain, makerSignatureTypes, makerSignatureValues);
+
+  // Call mint function
+  await vault
+    .connect(minter)
+  ["mint(uint256,(uint256,uint256[2],uint256,uint256,address,bytes),address)"](
+    totalCollateral,
+    {
+      expiry: expiry,
+      anchorPrices: anchorPrices,
+      makerCollateral: makerCollateral,
+      deadline: deadline,
+      maker: maker.address,
+      makerSignature: makerSignature
+    },
+    referral.address
+  );
+
+  return { vault, collateral, maker, minter };
+}
+
 async function mintBatch(
   params: Array<any>,
   deadline: number,
@@ -260,6 +312,59 @@ async function mintBatch(
     minterPermitSignature,
     minterNonce,
     deadline,
+    referral.address,
+  );
+}
+
+async function mintBatchWithoutPermit(
+  params: Array<any>,
+  vault: any,
+  minter: any,
+  referral: any,
+  eip721Domain: any
+) {
+  let totalCollaterals = [];
+  let paramsArray = [];
+  let minterCollateral = BigNumber.from(0);
+  for (let i = 0; i < params.length; i++) {
+    const { totalCollateral, expiry, anchorPrices, makerCollateral, deadline, maker } = params[i];
+    const makerSignatureTypes = { Mint: [
+      { name: 'minter', type: 'address' },
+      { name: 'totalCollateral', type: 'uint256' },
+      { name: 'expiry', type: 'uint256' },
+      { name: 'anchorPrices', type: 'uint256[2]' },
+      { name: 'makerCollateral', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'vault', type: 'address' },
+    ] };
+    const makerSignatureValues = {
+      minter: minter.address,
+      totalCollateral: totalCollateral,
+      expiry: expiry,
+      anchorPrices: anchorPrices,
+      makerCollateral: makerCollateral,
+      deadline: deadline,
+      vault: vault.address,
+    };
+    const makerSignature = await maker._signTypedData(eip721Domain, makerSignatureTypes, makerSignatureValues);
+    totalCollaterals[i] = totalCollateral;
+    paramsArray[i] = {
+      expiry: expiry,
+      anchorPrices: anchorPrices,
+      makerCollateral: makerCollateral,
+      deadline: deadline,
+      maker: maker.address,
+      makerSignature: makerSignature
+    };
+    minterCollateral = minterCollateral.add(totalCollateral).sub(makerCollateral);
+  }
+  //
+  // Call mint function
+  await vault
+    .connect(minter)
+  ["mintBatch(uint256[],(uint256,uint256[2],uint256,uint256,address,bytes)[],address)"](
+    totalCollaterals,
+    paramsArray,
     referral.address,
   );
 }
@@ -653,7 +758,9 @@ module.exports = {
   BigNumber,
   deployFixture,
   mint,
+  mintWithoutPermit,
   mintBatch,
+  mintBatchWithoutPermit,
   ethMint,
   ethMintBatch,
   mintWithCollateralAtRisk,
