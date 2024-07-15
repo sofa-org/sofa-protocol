@@ -11,10 +11,13 @@ const { parseEther, keccak256, solidityKeccak256, solidityPack, toUtf8Bytes } = 
 async function deployFixture() {
   const UNI_ROUTERV2_ADDR = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
   const UNI_ROUTERV3_ADDR = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
+  const STETH_ADDRESS = "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
   const uniRouterV2 = await ethers.getContractAt("IUniswapV2Router", UNI_ROUTERV2_ADDR);
 
   const UNI_FACTORY_ADDR = await uniRouterV2.factory();
   const uniFactory = await ethers.getContractAt("IUniswapV2Factory", UNI_FACTORY_ADDR);
+
+  const steth = await ethers.getContractAt("ILido", STETH_ADDRESS);
 
   // Permit2
   const permit2 = await ethers.getContractAt("IPermit2", PERMIT2_ADDRESS);
@@ -122,7 +125,7 @@ async function deployFixture() {
     atoken.address
   );
 
-  return { permit2, collateral, hlAggregator, spotAggregator, feeCollector, hlOracle, spotOracle, owner, minter, maker, referral, weth, atoken, aavePool };
+  return { permit2, collateral, hlAggregator, spotAggregator, feeCollector, hlOracle, spotOracle, owner, minter, maker, referral, weth, steth, atoken, aavePool };
 }
 
 async function mint(
