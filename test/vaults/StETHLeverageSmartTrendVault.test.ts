@@ -15,7 +15,7 @@ describe("StETHLeverageSmartTrendVault", function () {
   let collateral, feeCollector, oracle, minter, maker, referral, vault, eip721Domain, aggregator;
   beforeEach(async function () {
     ({
-      collateral,
+      steth: collateral,
       spotAggregator: aggregator,
       feeCollector,
       spotOracle: oracle,
@@ -47,6 +47,8 @@ describe("StETHLeverageSmartTrendVault", function () {
       chainId: 1,
       verifyingContract: vault.address,
     };
+    await collateral.connect(minter).submit(constants.AddressZero, {value:parseEther("1000")});
+    await collateral.connect(maker).submit(constants.AddressZero, {value:parseEther("1000")});
     await collateral.connect(minter).approve(vault.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
   });
@@ -69,9 +71,9 @@ describe("StETHLeverageSmartTrendVault", function () {
       const makerProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 1]);
       expect(await vault.balanceOf(minter.address, minterProductId)).to.equal(parseEther("71.071429226656442701"));
       expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("71.071429226656442701"));
-      expect(await collateral.balanceOf(vault.address)).to.equal(parseEther("100"));
-      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99990"));
-      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99910"));
+      expect(await collateral.balanceOf(vault.address)).to.equal(parseEther("99.999999999999999999"));
+      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("989.999999999999999999"));
+      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("909.999999999999999999"));
     });
   });
 
@@ -100,9 +102,9 @@ describe("StETHLeverageSmartTrendVault", function () {
       // Call burn function
       await expect(vault.connect(minter).burn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("71.071428899042500387"), parseEther("71.071428899042500387"));
       await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("71.071428899042500387"), 0);
-      expect(await vault.totalFee()).to.equal(parseEther("28.928571100957499613"));
-      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99981.071428899042500387"));
-      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99990"));
+      expect(await vault.totalFee()).to.equal(parseEther("28.928571100957499612"));
+      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("981.071428899042500386"));
+      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("989.999999999999999999"));
 
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400 * 368;
       await time.increaseTo(expiry - 86400 * 365);
@@ -120,12 +122,12 @@ describe("StETHLeverageSmartTrendVault", function () {
       await expect(vault.connect(minter).burn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("71.071428899042500387"), parseEther("65.071428899042500404"));
       await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("71.071428899042500387"), parseEther("5.999999999999999983"));
       expect(await vault.totalFee()).to.equal(parseEther("57.857142201914999226"));
-      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99956.142857798085000791"));
-      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99985.999999999999999983"));
+      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("956.142857798085000790"));
+      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("985.999999999999999981"));
 
       // withdraw fee
       const feeCollector = await vault.feeCollector();
-      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("57.857142201914999226"));
+      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("57.857142201914999224"));
     });
   });
 
@@ -156,9 +158,9 @@ describe("StETHLeverageSmartTrendVault", function () {
         { expiry:expiry, anchorPrices:anchorPricesB, collateralAtRiskPercentage:collateralAtRiskPercentageB, isMaker:1 }
       ]);
 
-      expect(await vault.totalFee()).to.equal(parseEther("57.857141874301056912"));
-      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99985.999999999999999993"));
-      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99956.142858125698943095"));
+      expect(await vault.totalFee()).to.equal(parseEther("57.857141874301056911"));
+      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("956.142858125698943094"));
+      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("985.999999999999999991"));
     });
   });
 

@@ -1,7 +1,6 @@
 // test/AAVEDNTVaultTest.ts
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import {
-  PERMIT2_ADDRESS,
   expect,
   constants,
   deployFixture,
