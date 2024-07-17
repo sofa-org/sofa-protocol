@@ -61,10 +61,10 @@ contract DNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Reen
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] payoffs);
     event FeeCollected(address collector, uint256 amount);
 
-    modifier onlyETHVault() {
-        require(address(collateral) == address(weth), "Vault: only ETH vault");
-        _;
-    }
+    // modifier onlyETHVault() {
+    //     require(address(collateral) == address(weth), "Vault: only ETH vault");
+    //     _;
+    // }
 
     receive() external payable {}
 
