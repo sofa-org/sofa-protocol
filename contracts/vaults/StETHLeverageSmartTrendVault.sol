@@ -171,8 +171,8 @@ contract StETHLeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1
         {
         // (totalCollateral - makerCollateral) = minterCollateral + minterCollateral * leverageRatio * borrowAPR / SECONDS_IN_YEAR  * (expiry - block.timestamp)
         uint256 minterCollateral = (totalCollateral - params.makerCollateral) * APR_BASE / (APR_BASE + leverageRatio * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR);
-        uint256 borrowFee = minterCollateral * leverageRatio * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
-        uint256 spreadFee = minterCollateral * leverageRatio * spreadAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / 1e18;
+        uint256 borrowFee = minterCollateral * leverageRatio * borrowAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / APR_BASE;
+        uint256 spreadFee = minterCollateral * leverageRatio * spreadAPR * (params.expiry - block.timestamp) / SECONDS_IN_YEAR / APR_BASE;
         require(borrowFee - spreadFee >= params.collateralAtRisk - params.makerCollateral, "Vault: invalid collateral at risk");
         collateralAtRiskPercentage = params.collateralAtRisk * 1e18 / (totalCollateral - spreadFee);
         require(collateralAtRiskPercentage > 0 && collateralAtRiskPercentage <= 1e18, "Vault: invalid collateral");
