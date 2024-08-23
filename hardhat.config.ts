@@ -51,12 +51,12 @@ const config: HardhatUserConfig = {
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
     hardhat: {
-      forking: {
-        enabled: true,
-        url: process.env.MAINNET_RPC_URL as string,
-        blockNumber: 20310000,
-      },
-      chainId: 1,
+      // forking: {
+      //   enabled: true,
+      //   url: process.env.MAINNET_RPC_URL as string,
+      //   blockNumber: 20310000,
+      // },
+      // chainId: 1,
     },
     mainnet: {
       url: process.env.MAINNET_RPC_URL || "",
@@ -77,6 +77,10 @@ const config: HardhatUserConfig = {
       url: process.env.MUMBAI_URL || "",
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
+    merlinTestnet: {
+      url: `https://testnet-rpc.merlinchain.io`,
+      accounts: [process.env.PRIVATE_KEY],
     },
   },
   gasReporter: {
