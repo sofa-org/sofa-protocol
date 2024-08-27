@@ -14,6 +14,7 @@ import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
 import "../interfaces/IStRCH.sol";
 import "../utils/SignatureBitMap.sol";
+import "hardhat/console.sol";
 
 contract RCHSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
@@ -90,6 +91,7 @@ contract RCHSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrade
         oracle = oracle_;
 
         stRCH = stRCH_;
+        collateral.approve(address(stRCH), type(uint256).max);
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 EIP712DOMAIN_TYPEHASH,
@@ -169,7 +171,7 @@ contract RCHSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrade
         {
         uint256 rebaseTokenShare;
         stRCH.mint(totalCollateral);
-        uint256 rebaseTokenBalance = collateral.balanceOf(address(this));
+        uint256 rebaseTokenBalance = stRCH.balanceOf(address(this));
         if (totalSupply > 0) {
             rebaseTokenShare = totalCollateral * totalSupply / (rebaseTokenBalance - totalCollateral);
         } else {
@@ -232,7 +234,7 @@ contract RCHSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrade
 
         // check self balance of collateral and transfer payoff
         if (payoffShare > 0) {
-            payoff = payoffShare * collateral.balanceOf(address(this)) / totalSupply;
+            payoff = payoffShare * stRCH.balanceOf(address(this)) / totalSupply;
             totalSupply -= payoffShare;
             emit Burned(_msgSender(), productId, amount, payoff);
         } else {
@@ -265,7 +267,7 @@ contract RCHSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrade
         uint256[] memory productIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
         uint256[] memory payoffs = new uint256[](products.length);
-        uint256 rebaseTokenBalance = collateral.balanceOf(address(this));
+        uint256 rebaseTokenBalance = stRCH.balanceOf(address(this));
         uint256 settlementFee;
         for (uint256 i = 0; i < products.length; i++) {
             Product memory product = products[i];
@@ -313,7 +315,7 @@ contract RCHSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrade
         uint256 fee = totalFee;
         require(fee > 0, "Vault: zero fee");
         totalFee = 0;
-        uint256 payoff = fee * collateral.balanceOf(address(this)) / totalSupply;
+        uint256 payoff = fee * stRCH.balanceOf(address(this)) / totalSupply;
         totalSupply -= fee;
         stRCH.withdraw(feeCollector, payoff);
 

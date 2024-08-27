@@ -125,7 +125,16 @@ async function deployFixture() {
     atoken.address
   );
 
-  return { permit2, collateral, hlAggregator, spotAggregator, feeCollector, hlOracle, spotOracle, owner, minter, maker, referral, weth, steth, atoken, aavePool };
+  const Airdrop = await ethers.getContractFactory("MerkleAirdrop");
+  const airdrop = await Airdrop.deploy(collateral.address);
+  const StRCH = await ethers.getContractFactory("StRCH");
+  const stRCH = await StRCH.deploy(collateral.address, airdrop.address);
+
+  return {
+    permit2, collateral, hlAggregator, spotAggregator, feeCollector,
+    hlOracle, spotOracle, owner, minter, maker, referral, weth, steth,
+    airdrop, stRCH, atoken, aavePool
+  };
 }
 
 async function mint(

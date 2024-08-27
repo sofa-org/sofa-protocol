@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "hardhat/console.sol";
 
 interface IMerkleAirdrop {
     function isClaimed(uint256[] calldata indexes) external view returns (bool[] memory);
@@ -24,8 +25,8 @@ contract StRCH is Context, Ownable {
     mapping(address => uint256) private _shares;
     mapping(address => uint256) public userAccRewards;
 
-    IERC20 public constant RCH = IERC20(0x57B96D4aF698605563A4653D882635da59Bf11AF);
-    IMerkleAirdrop public constant AIRDROP = IMerkleAirdrop(0x5a8cDDa6CA37B284b32eF8D513Ef71Ddac553270);
+    IERC20 public immutable rch;
+    IMerkleAirdrop public immutable airdrop;
 
     event Mint(address indexed account, uint256 amount, uint256 rewards);
     event Burn(address indexed from, address to, uint256 amount, uint256 rewards);
@@ -36,7 +37,9 @@ contract StRCH is Context, Ownable {
         _;
     }
 
-    constructor() {
+    constructor(IERC20 rch_, IMerkleAirdrop airdrop_) {
+        rch = rch_;
+        airdrop = airdrop_;
         lastRewardsUpdateTimestamp = block.timestamp;
     }
 
@@ -52,7 +55,7 @@ contract StRCH is Context, Ownable {
         _updateRewards();
         uint256 pendingRewards = _shares[_msgSender()] * accRewardsPerShare / 1e18 - userAccRewards[_msgSender()];
 
-        RCH.safeTransferFrom(account, address(this), amount);
+        rch.safeTransferFrom(account, address(this), amount);
         _mintShares(_msgSender(), pendingRewards + amount);
         userAccRewards[_msgSender()] = _shares[_msgSender()]  * accRewardsPerShare / 1e18;
 
@@ -69,7 +72,7 @@ contract StRCH is Context, Ownable {
     }
 
     function _burnFrom(address from, address to, uint256 amount) internal {
-        require(RCH.balanceOf(address(this)) >= amount, "StRCH: insufficient rewards");
+        require(rch.balanceOf(address(this)) >= amount, "StRCH: insufficient rewards");
 
         _updateRewards();
         uint256 pendingRewards = _shares[from] * accRewardsPerShare / 1e18 - userAccRewards[from];
@@ -81,7 +84,7 @@ contract StRCH is Context, Ownable {
             _burnShares(from, amount - pendingRewards);
         }
         userAccRewards[from] = _shares[from] * accRewardsPerShare / 1e18;
-        RCH.safeTransfer(to, amount);
+        rch.safeTransfer(to, amount);
 
         emit Burn(from, to, amount, pendingRewards);
     }
@@ -92,9 +95,15 @@ contract StRCH is Context, Ownable {
     }
 
     function _updateRewards() internal {
-        require(lastRewardsUpdateTimestamp < block.timestamp, "StRCH: rewards already updated");
+        if (block.timestamp <= lastRewardsUpdateTimestamp) {
+            return;
+        }
         uint256 rewards = _calculateRewards();
-        accRewardsPerShare = accRewardsPerShare + rewards * 1e18 / totalShares;
+        if (totalShares == 0) {
+            accRewardsPerShare = 1e18;
+        } else {
+            accRewardsPerShare = accRewardsPerShare + rewards * 1e18 / totalShares;
+        }
         lastRewardsUpdateTimestamp = block.timestamp;
     }
 
@@ -128,7 +137,7 @@ contract StRCH is Context, Ownable {
     }
 
     function interestIsClaimed(uint256[] calldata indexes) external view returns (bool[] memory) {
-        return AIRDROP.isClaimed(indexes);
+        return airdrop.isClaimed(indexes);
     }
 
     function claimInterest(
@@ -136,6 +145,6 @@ contract StRCH is Context, Ownable {
         uint256[] calldata amounts,
         bytes32[][] calldata merkleProofs
     ) external {
-        AIRDROP.claimMultiple(indexes, amounts, merkleProofs);
+        airdrop.claimMultiple(indexes, amounts, merkleProofs);
     }
 }
