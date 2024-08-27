@@ -17,7 +17,7 @@ contract StRCH is Context, Ownable {
     using SafeERC20 for IERC20;
 
     uint256 public totalShares;
-    uint256 public interestRate = 3e16; //1e18
+    uint256 public interestRate; //1e18
     uint256 public accRewardsPerShare; //1e18
     uint256 public lastRewardsUpdateTimestamp;
 
@@ -37,9 +37,10 @@ contract StRCH is Context, Ownable {
         _;
     }
 
-    constructor(IERC20 rch_, IMerkleAirdrop airdrop_) {
+    constructor(IERC20 rch_, IMerkleAirdrop airdrop_, uint256 interestRate_) {
         rch = rch_;
         airdrop = airdrop_;
+        interestRate = interestRate_;
         lastRewardsUpdateTimestamp = block.timestamp;
     }
 
