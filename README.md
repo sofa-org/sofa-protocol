@@ -8,4 +8,4 @@ This project is for [SOFA.org](https://sofa.org) contracts developing.
 
 ## Usage
 1. npm install
-2. npx hardhat test
+2. npx hardhat test test/tokenomics/StRCH.test.ts
