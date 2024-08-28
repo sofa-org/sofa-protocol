@@ -121,17 +121,17 @@ describe("RCHSmartTrendVault", function () {
       minterProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 0]);
       makerProductId = solidityKeccak256(["uint256", "uint256[2]", "uint256", "uint256"], [expiry, anchorPrices, collateralAtRiskPercentage, 1]);
       time.setNextBlockTimestamp(expiry + 60);
-      await expect(vault.connect(minter).burn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("99875371852237134387.872375020626893632"), parseEther("89.807442328767123286"));
+      await expect(vault.connect(minter).burn(expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("99875371852237134055.036542433952163781"), parseEther("89.807442328767123286"));
       time.setNextBlockTimestamp(expiry + 62);
-      await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("99875371852237134387.872375020626893632"), parseEther("10.000828786150739643"));
-      expect(await vault.totalFee()).to.equal(parseEther("499950694398873141.617687065254270923"));
+      await expect(vault.connect(maker).burn(expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("99875371852237134055.036542433952163781"), parseEther("10.000828786150739653"));
+      expect(await vault.totalFee()).to.equal(parseEther("499950694398873140.951349062077744937"));
       expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("100009.523899657534246481"));
-      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99990.000828786150739643"));
+      expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("99990.000828786150739653"));
 
       // withdraw fee
       const feeCollector = await vault.feeCollector();
       await collateral.connect(minter).transfer(stRCH.address, parseEther("1"));
-      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("0.500115423029135294"));
+      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("0.500115423029135296"));
 
       // another strike case
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;

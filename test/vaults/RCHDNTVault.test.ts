@@ -125,19 +125,19 @@ describe("RCHDNTVault", function () {
       makerProductId = solidityKeccak256(["uint256", "uint256", "uint256[2]", "uint256", "uint256"], [term, expiry, anchorPrices, collateralAtRiskPercentage, 1]);
       await oracle.settle();
       time.setNextBlockTimestamp(expiry + 60);
-      await expect(vault.connect(minter).burn(term, expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("99875371852221647270.329868095056690662"), parseEther("99.708262808219178069"));
+      await expect(vault.connect(minter).burn(term, expiry, anchorPrices, collateralAtRiskPercentage, 0)).to.emit(vault, "Burned").withArgs(minter.address, minterProductId, parseEther("99875371852221647270.329868095056690662"), parseEther("99.708262808219178070"));
       time.setNextBlockTimestamp(expiry + 62);
       await expect(vault.connect(maker).burn(term, expiry, anchorPrices, collateralAtRiskPercentage, 1)).to.emit(vault, "Burned").withArgs(maker.address, makerProductId, parseEther("99875371852221647270.329868095056690662"), 0);
 
       expect(await vault.totalFee()).to.equal(parseEther("399926041598263204.816054915496223000"));
-      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99999.621451780821917740"));
+      expect(await collateral.balanceOf(minter.address)).to.equal(parseEther("99999.621451780821917741"));
       expect(await collateral.balanceOf(maker.address)).to.equal(parseEther("100000.003301407921045184"));
 
       // withdraw fee
       const feeCollector = await vault.feeCollector();
       await expect(vault.harvest()).to.be.revertedWith("StRCH: insufficient rewards");
       await collateral.connect(minter).transfer(stRCH.address, parseEther("1"));
-      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("0.400057813511124246"));
+      await expect(vault.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("0.400057813511124247"));
     });
 
     it("should burn tokens if knock-out", async function () {

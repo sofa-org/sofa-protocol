@@ -99,22 +99,21 @@ contract StRCH is Context, Ownable {
         if (block.timestamp <= lastRewardsUpdateTimestamp) {
             return;
         }
-        uint256 rewards = _calculateRewards();
         if (totalShares == 0) {
             accRewardsPerShare = 1e18;
         } else {
-            accRewardsPerShare = accRewardsPerShare + rewards * 1e18 / totalShares;
+            accRewardsPerShare = accRewardsPerShare + _calculateRewardsPerShare();
         }
         lastRewardsUpdateTimestamp = block.timestamp;
     }
 
-    function _calculateRewards() internal view returns (uint256) {
+    function _calculateRewardsPerShare() internal view returns (uint256) {
         uint256 timePassed = block.timestamp - lastRewardsUpdateTimestamp;
-        return totalShares * interestRate * timePassed / 365 days / 1e18;
+        return interestRate * timePassed / 365 days;
     }
 
     function _pendingRewards(address account) internal view returns (uint256) {
-        uint256 newAccRewardsPerShare = accRewardsPerShare + _calculateRewards() * 1e18 / totalShares;
+        uint256 newAccRewardsPerShare = accRewardsPerShare + _calculateRewardsPerShare();
         return _shares[account] * newAccRewardsPerShare / 1e18 - userAccRewards[account];
     }
 
