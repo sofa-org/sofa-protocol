@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
-import { BigNumber, constants } from "ethers";
-import { loadFixture, time, mine } from "@nomicfoundation/hardhat-network-helpers";
+import { constants } from "ethers";
+import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 
 const { parseEther } = ethers.utils;
 
@@ -24,7 +24,6 @@ describe("StRCH", function () {
     await rch.mint(vaultB.address, parseEther("1000"));
     await rch.connect(vaultA).approve(strch.address, constants.MaxUint256);
     await rch.connect(vaultB).approve(strch.address, constants.MaxUint256);
-
     //MerkleAirdrop
     await rch.transferOwnership(airdrop.address);
     const addr = strch.address //"0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
@@ -34,20 +33,17 @@ describe("StRCH", function () {
     const anotherNode = '0x1daab6e461c57679d093fe722a8bf8ba48798a5a9386000d2176d175bc5fae57';
     const merkleRoot = nodeComp(leaf, anotherNode);
     //console.log("merkleRoot:", merkleRoot);
-    //const merkleRoot = '0x49e1b86aff6a7c1613dd42addb7f788612c0405c47da0753884a6040273c4d48'; // Replace with actual merkle root
     // yesterday 12am timestamp
     let currentDate = new Date();
     currentDate.setDate(currentDate.getDate());
     currentDate.setUTCHours(0, 0, 0, 0);
     const timestampA = Math.floor(currentDate.getTime() / 1000); 
     await airdrop.connect(owner).setMerkleRoot(timestampA, merkleRoot);
-
     let yesterdayDate = new Date();
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     yesterdayDate.setUTCHours(0, 0, 0, 0);
     const timestampB = Math.floor(yesterdayDate.getTime() / 1000);
     await airdrop.connect(owner).setMerkleRoot(timestampB, merkleRoot);
-
     return {rch, airdrop, strch, vaultA, vaultB, user, 
             timestampA, timestampB, amountAirdrop, anotherNode}; //for merkleAirdrop
   }
@@ -178,9 +174,6 @@ describe("StRCH", function () {
       expect(await strch.lastRewardsUpdateTimestamp())
         .to.equal(beforeTime+1);
     });
-
-
-
   });
 
   describe("withdraw", function () {
@@ -254,7 +247,7 @@ describe("StRCH", function () {
         .to.changeTokenBalances(rch, [strch], [amountAirdrop.mul(2)]);
     });
   });
-
+  
   describe("interestIsClaimed", function () {
     it("Should false by default claim interest", async function () {
       const indexes = [timestampA, timestampB];
@@ -271,10 +264,7 @@ describe("StRCH", function () {
     });
   });
 
-
   //application from vaults
-
-
   describe("Simple Interest", function () {
     it("Should be different for vaultA and vaultB", async function () {
       const ir = parseEther("1"); //100% to make it obvious
@@ -307,8 +297,6 @@ describe("StRCH", function () {
       expect(await strch.balanceOf(vaultB.address)).to.equal(300);
     });
   })
-
-
 })
 
 function leafComp(address: any, amount: any) {
@@ -327,5 +315,3 @@ function nodeComp(hash1: any, hash2: any) {
   );
   return ethers.utils.keccak256(encoded);
 }
-
-
