@@ -14,7 +14,6 @@ import "../interfaces/IHlOracle.sol";
 import "../interfaces/IFeeCollector.sol";
 import "../interfaces/IStRCH.sol";
 import "../utils/SignatureBitMap.sol";
-import "hardhat/console.sol";
 
 contract RCHDNTVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
