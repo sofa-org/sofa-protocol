@@ -307,9 +307,7 @@ describe("StRCH", function () {
       let futureTime = (await time.latest()) + aYear
       await time.increaseTo(futureTime);
       //await strch.connect(vaultA).mint(0);
-
       await strch.connect(vaultA).withdraw(user.address, 0);
-
       // console.log("balance of A:", await strch.balanceOf(vaultA.address));
       // console.log("balance of B:", await strch.balanceOf(vaultB.address));
       // console.log("userAccRewards A:", await strch.userAccRewards(vaultA.address));
