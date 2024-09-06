@@ -227,6 +227,31 @@ describe("StRCH", function () {
       await expect(strch.connect(vaultA).withdraw(user.address, amount.mul(2)))
         .to.be.revertedWith("StRCH: insufficient balance");
     });
+    it("Should user's shares be correct", async function () {
+      const rewardPerBlock = 95129375900; //rewards per second 3%
+      //withdraw amount == pendingRewards
+      console.log("before withdraw:", await time.latest());
+      await strch.connect(vaultA).withdraw(user.address, rewardPerBlock);
+      console.log("after withdraw:", await time.latest());
+      expect(await strch.userAccRewards(vaultA.address)).to.equal(amount.add(rewardPerBlock));
+      console.log("after call userAccRewards:", await time.latest());
+      expect(await strch.balanceOf(vaultA.address)).to.equal(amount);
+      expect(await strch.totalShares()).to.equal(amount);
+      console.log("after call balanceOf:", await time.latest());
+      //withdraw amount > pendingRewards
+      await strch.connect(vaultA).withdraw(user.address, amount.div(2));
+      const bal0 = amount.div(2).add(rewardPerBlock);
+      expect(await strch.balanceOf(vaultA.address)).to.equal(bal0);
+      expect(await strch.totalShares()).to.equal(bal0);
+      //withdraw amount < pendingRewards
+      const rewardPerBlock1 = 47564688041;
+      const bal1 = bal0.add(rewardPerBlock1).sub(100);
+      await strch.connect(vaultA).withdraw(user.address, 100);
+      expect(await strch.balanceOf(vaultA.address)).to.equal(bal1);
+      expect(await strch.totalShares()).to.equal(bal1);
+      await rch.connect(vaultA).approve(strch.address, constants.MaxUint256); //make time go
+      expect(await strch.balanceOf(vaultA.address)).to.gt(await strch.totalShares());
+    });
   });
   
   describe("immutable", function () {
