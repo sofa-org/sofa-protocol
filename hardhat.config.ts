@@ -68,6 +68,11 @@ const config: HardhatUserConfig = {
       accounts:
         process.env.PRIVATE_KEY_ARBITRUM !== undefined ? [process.env.PRIVATE_KEY_ARBITRUM] : [],
     },
+    bsc: {
+      url: process.env.BSC_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY_BSC !== undefined ? [process.env.PRIVATE_KEY_BSC] : [],
+    },
     sepolia: {
       url: process.env.SEPOLIA_URL || "",
       accounts:
@@ -78,9 +83,19 @@ const config: HardhatUserConfig = {
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
+    merlin: {
+      url: `https://rpc.merlinchain.io`,
+      accounts:
+        process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
+    },
     merlinTestnet: {
       url: `https://testnet-rpc.merlinchain.io`,
       accounts: [process.env.PRIVATE_KEY],
+    },
+    beraTestnet: {
+      url: `https://bartio.rpc.berachain.com/`,
+      accounts:
+        process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
     },
   },
   gasReporter: {
@@ -93,6 +108,7 @@ const config: HardhatUserConfig = {
       sepolia: process.env.ETHERSCAN_API_KEY,
       arbitrumOne: process.env.ARBITRUMSCAN_API_KEY,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY,
+      bsc: process.env.BSCSCAN_API_KEY,
     },
   },
   abiExporter: {

@@ -13,7 +13,7 @@ import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
 import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
 import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
-import "../interfaces/IWETH.sol";
+// import "../interfaces/IWETH.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
@@ -57,7 +57,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     string public name;
     string public symbol;
 
-    IWETH public weth;
+    // IWETH public weth;
     ISmartTrendStrategy public strategy;
     IERC20Metadata public collateral;
     IPool public pool;
@@ -74,10 +74,10 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] payoffs);
     event FeeCollected(address collector, uint256 amount);
 
-    modifier onlyETHVault() {
-        require(address(collateral) == address(weth), "Vault: only ETH vault");
-        _;
-    }
+    // modifier onlyETHVault() {
+    //     require(address(collateral) == address(weth), "Vault: only ETH vault");
+    //     _;
+    // }
 
     receive() external payable {}
 
@@ -85,7 +85,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         string memory name_,
         string memory symbol_,
         ISmartTrendStrategy strategy_,
-        address weth_,
+        // address weth_,
         address collateral_,
         IPool pool_,
         address feeCollector_,
@@ -94,7 +94,7 @@ contract AAVESmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgrad
         name = name_;
         symbol = symbol_;
 
-        weth = IWETH(weth_);
+        // weth = IWETH(weth_);
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);
