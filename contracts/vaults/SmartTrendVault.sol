@@ -9,7 +9,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
-import "../interfaces/IWETH.sol";
+// import "../interfaces/IWETH.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
@@ -46,7 +46,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
     string public name;
     string public symbol;
 
-    IWETH public weth;
+    // IWETH public weth;
     ISmartTrendStrategy public strategy;
     IERC20Metadata public collateral;
     ISpotOracle public oracle;
@@ -71,7 +71,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         string memory name_,
         string memory symbol_,
         ISmartTrendStrategy strategy_,
-        address weth_,
+        // address weth_,
         address collateral_,
         address feeCollector_,
         ISpotOracle oracle_
@@ -79,7 +79,7 @@ contract SmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         name = name_;
         symbol = symbol_;
 
-        weth = IWETH(weth_);
+        // weth = IWETH(weth_);
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);

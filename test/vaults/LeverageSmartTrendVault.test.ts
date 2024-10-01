@@ -37,7 +37,7 @@ describe("LeverageSmartTrendVault", function () {
       "Sofa ETH",
       "sfETH",
       strategy.address, // Mock strategy contract
-      weth.address, // Mock weth contract
+      // weth.address, // Mock weth contract
       collateral.address,
       aavePool.address,
       feeCollector.address,

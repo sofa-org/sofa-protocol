@@ -14,7 +14,7 @@ import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
 import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
 import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
 import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
-import "../interfaces/IWETH.sol";
+// import "../interfaces/IWETH.sol";
 import "../interfaces/ISmartTrendStrategy.sol";
 import "../interfaces/ISpotOracle.sol";
 import "../utils/SignatureBitMap.sol";
@@ -55,7 +55,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
     string public name;
     string public symbol;
 
-    IWETH public weth;
+    // IWETH public weth;
     ISmartTrendStrategy public strategy;
     IERC20Metadata public collateral;
     IPool public pool;
@@ -85,7 +85,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         string memory name_,
         string memory symbol_,
         ISmartTrendStrategy strategy_,
-        address weth_,
+        // address weth_,
         address collateral_,
         IPool pool_,
         address feeCollector_,
@@ -97,7 +97,7 @@ contract LeverageSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Up
         name = name_;
         symbol = symbol_;
 
-        weth = IWETH(weth_);
+        // weth = IWETH(weth_);
         strategy = strategy_;
 
         collateral = IERC20Metadata(collateral_);
