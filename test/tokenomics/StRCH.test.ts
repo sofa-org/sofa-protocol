@@ -166,7 +166,7 @@ describe("StRCH", function () {
     it("Should not change lastRewardsUpdateTimestamp if block.timestamp == lastRewardsUpdateTimestamp", async function () {
       await network.provider.send("evm_setAutomine", [false]);
       const beforeTime = await time.latest();
-      console.log("beforeTime", beforeTime);
+      // console.log("beforeTime", beforeTime);
       await strch.connect(vaultA).mint(amount);
       await strch.connect(vaultA).mint(amount);
       await network.provider.send("evm_mine");
@@ -230,14 +230,14 @@ describe("StRCH", function () {
     it("Should user's shares be correct", async function () {
       const rewardPerBlock = 95129375900; //rewards per second 3%
       //withdraw amount == pendingRewards
-      console.log("before withdraw:", await time.latest());
+      // console.log("before withdraw:", await time.latest());
       await strch.connect(vaultA).withdraw(user.address, rewardPerBlock);
-      console.log("after withdraw:", await time.latest());
+      // console.log("after withdraw:", await time.latest());
       expect(await strch.userAccRewards(vaultA.address)).to.equal(amount.add(rewardPerBlock));
-      console.log("after call userAccRewards:", await time.latest());
+      // console.log("after call userAccRewards:", await time.latest());
       expect(await strch.balanceOf(vaultA.address)).to.equal(amount);
       expect(await strch.totalShares()).to.equal(amount);
-      console.log("after call balanceOf:", await time.latest());
+      // console.log("after call balanceOf:", await time.latest());
       //withdraw amount > pendingRewards
       await strch.connect(vaultA).withdraw(user.address, amount.div(2));
       const bal0 = amount.div(2).add(rewardPerBlock);
