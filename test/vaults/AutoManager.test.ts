@@ -98,7 +98,7 @@ describe("AutoManager", function () {
   describe("Deposit/Withdraw", function () {
     it("Should deposit collateral to vault", async function () {
       const amount = parseEther("100");
-      await expect(autoManager.connect(minter).deposit(amount)).to.emit(autoManager, "Deposit");
+      await expect(autoManager.connect(minter).deposit(amount)).to.emit(autoManager, "Deposited");
       expect(await collateral.balanceOf(autoManager.address)).to.be.equal(amount);
       const { shares }  = await autoManager.connect(minter).getUserInfo()
       expect(shares).to.equal(amount);

@@ -80,7 +80,16 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
         Product[] products;
     }
 
-    event Deposit(address indexed account, uint256 amount, uint256 shares);
+    event Deposited(address indexed account, uint256 amount, uint256 shares);
+    event Withdrawn(address indexed account, uint256 amount, uint256 rchRewards, uint256 pendingRedemptions);
+    event Claimed(address indexed account, uint256 amount);
+    event ProductsMinted(ProductMint[] products);
+    event ProductsBurned(ProductBurn[] products);
+    event ReferralUpdated(address refferal);
+    event VaultsEnabled(address[] vaults);
+    event VaultsDisabled(address[] vaults);
+    event MakersEnabled(address[] makers);
+    event MakersDisabled(address[] makers);
     event RCHClaimed(uint256[] indexes, uint256[] amounts, uint256 accRCHPerShare);
 
     constructor() {}
@@ -106,7 +115,7 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
         _users[_msgSender()].accCollateral = _users[_msgSender()].shares  * accCollateralPerShare / 1e18;
         _users[_msgSender()].lastDepositTimestamp = block.timestamp;
 
-        emit Deposit(_msgSender(), amount, amount + pendingCollateral);
+        emit Deposited(_msgSender(), amount, amount + pendingCollateral);
     }
 
     function withdraw(uint256 amount) external {
@@ -134,6 +143,8 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
             _users[_msgSender()].pendingRedemptions = amount;
             totalPendingRedemptions = totalPendingRedemptions + amount;
         }
+
+        emit Withdrawn(_msgSender(), amount, pendingRCH, _users[_msgSender()].pendingRedemptions);
     }
 
     function claimRedemptions() external {
@@ -144,6 +155,8 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
         _users[_msgSender()].pendingRedemptions = 0;
         totalPendingRedemptions = totalPendingRedemptions - amount;
         collateral.safeTransfer(_msgSender(), amount);
+
+        emit Claimed(_msgSender(), amount);
     }
 
     function mintProducts(
@@ -166,6 +179,8 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(_makers[signer], "AutoManager: invalid maker");
         require(collateral.balanceOf(address(this)) >= totalPendingRedemptions, "AutoManager: no enough collateral to redeem");
+
+        emit ProductsMinted(products);
     }
 
     function burnProducts(
@@ -184,6 +199,8 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
             delete _positions[id];
         }
         accCollateralPerShare = accCollateralPerShare + pendingCollateralPerShare;
+
+        emit ProductsBurned(products);
     }
 
     function _mintShares(address account, uint256 sharesAmount) internal {
@@ -198,6 +215,7 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
 
     function updateRefferal(address refferal_) external onlyOwner {
         refferal = refferal_;
+        emit ReferralUpdated(refferal_);
     }
 
     function enableVaults(address[] calldata vaults_) external onlyOwner {
@@ -205,6 +223,7 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
             _vaults[vaults_[i]] = true;
             collateral.approve(vaults_[i], type(uint256).max);
         }
+        emit VaultsEnabled(vaults_);
     }
 
     function disableVaults(address[] calldata vaults_) external onlyOwner {
@@ -212,18 +231,21 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
             _vaults[vaults_[i]] = false;
             collateral.approve(vaults_[i], 0);
         }
+        emit VaultsDisabled(vaults_);
     }
 
     function enableMakers(address[] calldata makers_) external onlyOwner {
         for (uint256 i = 0; i < makers_.length; i++) {
             _makers[makers_[i]] = true;
         }
+        emit MakersEnabled(makers_);
     }
 
     function disableMakers(address[] calldata makers_) external onlyOwner {
         for (uint256 i = 0; i < makers_.length; i++) {
             _makers[makers_[i]] = false;
         }
+        emit MakersDisabled(makers_);
     }
 
     function claimRCH(
