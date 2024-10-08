@@ -82,7 +82,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     event Deposited(address indexed account, uint256 amount, uint256 shares);
     event Withdrawn(address indexed account, uint256 amount, uint256 rchRewards, uint256 pendingRedemptions);
-    event Claimed(address indexed account, uint256 amount);
+    event RedemptionsClaimed(address indexed account, uint256 amount);
     event ProductsMinted(ProductMint[] products);
     event ProductsBurned(ProductBurn[] products);
     event ReferralUpdated(address refferal);
@@ -104,6 +104,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         collateral = collateral_;
         airdrop = airdrop_;
         refferal = refferal_;
+        accCollateralPerShare = 1e18;
         __Ownable_init();
         __ERC1155Holder_init();
     }
@@ -156,7 +157,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         totalPendingRedemptions = totalPendingRedemptions - amount;
         collateral.safeTransfer(_msgSender(), amount);
 
-        emit Claimed(_msgSender(), amount);
+        emit RedemptionsClaimed(_msgSender(), amount);
     }
 
     function mintProducts(
@@ -186,19 +187,22 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     function burnProducts(
         ProductBurn[] calldata products
     ) external {
-        uint256 pendingCollateralPerShare = 0;
+        uint256 totalEarned;
+        uint256 totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             uint256 balanceBefore = collateral.balanceOf(address(this));
             IVault(products[i].vault).burnBatch(products[i].products);
             uint256 balanceAfter = collateral.balanceOf(address(this));
-            uint256 earnings = balanceAfter - balanceBefore;
+            totalEarned += balanceAfter - balanceBefore;
             bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[0].expiry, products[i].products[0].anchorPrices));
-            require(earnings >= _positions[id], "Automator: insufficient earnings");
-
-            pendingCollateralPerShare = pendingCollateralPerShare + (earnings - _positions[id]) * 1e18 / totalShares;
+            totalPositions += _positions[id];
             delete _positions[id];
         }
-        accCollateralPerShare = accCollateralPerShare + pendingCollateralPerShare;
+        if (totalEarned > totalPositions) {
+            accCollateralPerShare += (totalEarned - totalPositions) * 1e18 / totalShares;
+        } else if (totalEarned < totalPositions) {
+            accCollateralPerShare -= (totalPositions - totalEarned) * 1e18 / totalShares;
+        }
 
         emit ProductsBurned(products);
     }

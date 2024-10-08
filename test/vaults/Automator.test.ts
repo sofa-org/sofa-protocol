@@ -238,7 +238,7 @@ describe("Automator", function () {
       await time.increaseTo(expiry);
       await oracle.settle();
       await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
-      expect(await automator.accCollateralPerShare()).to.equal(parseEther("0.097"));
+      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.097"));
     });
 
     it("should successfully mint/burn two products", async function () {
@@ -281,7 +281,7 @@ describe("Automator", function () {
       await time.increaseTo(expiry);
       await oracle.settle();
       await expect(automator.connect(minter).burnProducts([productBurn, productBurnB])).to.not.be.reverted;
-      expect(await automator.accCollateralPerShare()).to.equal(parseEther("0.097"));
+      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.097"));
     });
 
     it("should withdraw zero", async function () {
