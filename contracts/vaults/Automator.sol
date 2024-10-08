@@ -42,7 +42,7 @@ interface IMerkleAirdrop {
     function claimMultiple(uint256[] calldata indexes, uint256[] calldata amounts, bytes32[][] calldata merkleProofs) external;
 }
 
-contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable {
+contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
@@ -119,13 +119,13 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
     }
 
     function withdraw(uint256 amount) external {
-        require(_users[_msgSender()].lastDepositTimestamp < block.timestamp - 7 days, "AutoManager: can't withdraw within 7 days of deposit");
+        require(_users[_msgSender()].lastDepositTimestamp < block.timestamp - 7 days, "Automator: can't withdraw within 7 days of deposit");
 
         uint256 pendingRCH = _users[_msgSender()].shares * accRCHPerShare / 1e18 - _users[_msgSender()].accRCH;
-        require(rch.balanceOf(address(this)) >= pendingRCH, "AutoManager: insufficient rch rewards");
+        require(rch.balanceOf(address(this)) >= pendingRCH, "Automator: insufficient rch rewards");
 
         uint256 pendingCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18 - _users[_msgSender()].accCollateral;
-        require(_users[_msgSender()].shares + pendingCollateral >= amount, "AutoManager: insufficient balance");
+        require(_users[_msgSender()].shares + pendingCollateral >= amount, "Automator: insufficient balance");
 
         if (pendingCollateral > amount) {
             _mintShares(_msgSender(), pendingCollateral - amount);
@@ -149,8 +149,8 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
 
     function claimRedemptions() external {
         uint256 amount = _users[_msgSender()].pendingRedemptions;
-        require(amount > 0, "AutoManager: no pending redemptions");
-        require(collateral.balanceOf(address(this)) >= amount, "AutoManager: no enough collateral to redeem");
+        require(amount > 0, "Automator: no pending redemptions");
+        require(collateral.balanceOf(address(this)) >= amount, "Automator: no enough collateral to redeem");
 
         _users[_msgSender()].pendingRedemptions = 0;
         totalPendingRedemptions = totalPendingRedemptions - amount;
@@ -165,7 +165,7 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
     ) external {
         bytes32 signatures;
         for (uint256 i = 0; i < products.length; i++) {
-            require(_vaults[products[i].vault], "AutoManager: invalid vault");
+            require(_vaults[products[i].vault], "Automator: invalid vault");
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
                 products[i].mintParams,
@@ -177,8 +177,8 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
         }
 
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
-        require(_makers[signer], "AutoManager: invalid maker");
-        require(collateral.balanceOf(address(this)) >= totalPendingRedemptions, "AutoManager: no enough collateral to redeem");
+        require(_makers[signer], "Automator: invalid maker");
+        require(collateral.balanceOf(address(this)) >= totalPendingRedemptions, "Automator: no enough collateral to redeem");
 
         emit ProductsMinted(products);
     }
@@ -193,7 +193,7 @@ contract AutoManager is Initializable, ContextUpgradeable, OwnableUpgradeable, E
             uint256 balanceAfter = collateral.balanceOf(address(this));
             uint256 earnings = balanceAfter - balanceBefore;
             bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[0].expiry, products[i].products[0].anchorPrices));
-            require(earnings >= _positions[id], "AutoManager: insufficient earnings");
+            require(earnings >= _positions[id], "Automator: insufficient earnings");
 
             pendingCollateralPerShare = pendingCollateralPerShare + (earnings - _positions[id]) * 1e18 / totalShares;
             delete _positions[id];

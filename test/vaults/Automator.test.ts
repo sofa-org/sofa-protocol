@@ -14,8 +14,8 @@ import {
   signSignatures,
 } from "../helpers/helpers";
 
-describe("AutoManager", function () {
-  let collateral, feeCollector, oracle, owner, minter, maker, referral, vaultA, vaultB, eip721DomainA, eip721DomainB, aggregator, rch, airdrop, atoken, aavePool, autoManager;
+describe("Automator", function () {
+  let collateral, feeCollector, oracle, owner, minter, maker, referral, vaultA, vaultB, eip721DomainA, eip721DomainB, aggregator, rch, airdrop, atoken, aavePool, automator;
   beforeEach(async function () {
     ({
       collateral,
@@ -71,26 +71,26 @@ describe("AutoManager", function () {
       verifyingContract: vaultB.address,
     };
 
-    // AUtoManager contract
-    const AutoManager = await ethers.getContractFactory("AutoManager");
-    autoManager = await upgrades.deployProxy(AutoManager, [
+    // Automator contract
+    const Automator = await ethers.getContractFactory("Automator");
+    automator = await upgrades.deployProxy(Automator, [
       rch.address,
       collateral.address,
       airdrop.address,
       referral.address
     ]);
 
-    await collateral.connect(minter).approve(autoManager.address, constants.MaxUint256); // approve max
+    await collateral.connect(minter).approve(automator.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vaultA.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vaultB.address, constants.MaxUint256); // approve max
   });
 
   describe("Initialization", function () {
     it("Should initialize with correct parameters", async function () {
-      expect(await autoManager.rch()).to.equal(rch.address);
-      expect(await autoManager.collateral()).to.equal(collateral.address);
-      expect(await autoManager.airdrop()).to.equal(airdrop.address);
-      expect(await autoManager.refferal()).to.equal(referral.address);
+      expect(await automator.rch()).to.equal(rch.address);
+      expect(await automator.collateral()).to.equal(collateral.address);
+      expect(await automator.airdrop()).to.equal(airdrop.address);
+      expect(await automator.refferal()).to.equal(referral.address);
     });
   });
 
@@ -98,22 +98,22 @@ describe("AutoManager", function () {
   describe("Deposit/Withdraw", function () {
     it("Should deposit collateral to vault", async function () {
       const amount = parseEther("100");
-      await expect(autoManager.connect(minter).deposit(amount)).to.emit(autoManager, "Deposited");
-      expect(await collateral.balanceOf(autoManager.address)).to.be.equal(amount);
-      const { shares }  = await autoManager.connect(minter).getUserInfo()
+      await expect(automator.connect(minter).deposit(amount)).to.emit(automator, "Deposited");
+      expect(await collateral.balanceOf(automator.address)).to.be.equal(amount);
+      const { shares }  = await automator.connect(minter).getUserInfo()
       expect(shares).to.equal(amount);
     });
 
     it("Should not allow withdraw within 7 days of deposit", async function () {
-      await autoManager.connect(minter).deposit(ethers.utils.parseEther("100"));
-      await expect(autoManager.connect(minter).withdraw(ethers.utils.parseEther("50"))).to.be.revertedWith("AutoManager: can't withdraw within 7 days of deposit");
+      await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
+      await expect(automator.connect(minter).withdraw(ethers.utils.parseEther("50"))).to.be.revertedWith("Automator: can't withdraw within 7 days of deposit");
     });
 
     it("Should allow withdraw after 7 days", async function () {
-      await autoManager.connect(minter).deposit(ethers.utils.parseEther("100"));
+      await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
-      await autoManager.connect(minter).withdraw(ethers.utils.parseEther("50"));
-      const { shares }  = await autoManager.connect(minter).getUserInfo()
+      await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
+      const { shares }  = await automator.connect(minter).getUserInfo()
       expect(shares).to.equal(ethers.utils.parseEther("50"));
     });
   });
@@ -123,9 +123,9 @@ describe("AutoManager", function () {
     let productMintB: any;
     let expiry, anchorPrices, anchorPricesB;
     beforeEach(async function () {
-      await autoManager.enableMakers([maker.address]);
-      await autoManager.enableVaults([vaultA.address, vaultB.address]);
-      await autoManager.connect(minter).deposit(ethers.utils.parseEther("100"));
+      await automator.enableMakers([maker.address]);
+      await automator.enableVaults([vaultA.address, vaultB.address]);
+      await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
       const totalCollateral = parseEther("100");
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       anchorPrices = [parseEther("28000"), parseEther("30000")];
@@ -141,7 +141,7 @@ describe("AutoManager", function () {
         makerCollateral,
         deadline,
         vaultA,
-        autoManager,
+        automator,
         maker,
         eip721DomainA
       );
@@ -153,7 +153,7 @@ describe("AutoManager", function () {
         makerCollateral,
         deadline,
         vaultB,
-        autoManager,
+        automator,
         maker,
         eip721DomainB
       );
@@ -188,29 +188,29 @@ describe("AutoManager", function () {
 
     it("should successfully mint products with valid signature", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      await expect(autoManager.connect(minter).mintProducts([productMint], signaturesSignature)).to.not.be.reverted;
+      await expect(automator.connect(minter).mintProducts([productMint], signaturesSignature)).to.not.be.reverted;
     });
 
     it("should fail minting products with invalid signature", async function () {
       const signaturesSignature = await signSignatures([productMint], minter);
-      await expect(autoManager.connect(minter).mintProducts([productMint], signaturesSignature)).to.be.revertedWith("AutoManager: invalid maker");
+      await expect(automator.connect(minter).mintProducts([productMint], signaturesSignature)).to.be.revertedWith("Automator: invalid maker");
     });
 
     it("should fail if a vault is not whitelisted", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      await autoManager.disableVaults([vaultA.address]);
-      await expect(autoManager.connect(minter).mintProducts([productMint], signaturesSignature)).to.be.revertedWith("AutoManager: invalid vault");
+      await automator.disableVaults([vaultA.address]);
+      await expect(automator.connect(minter).mintProducts([productMint], signaturesSignature)).to.be.revertedWith("Automator: invalid vault");
     });
 
     it("should fail if a maker is not whitelisted", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      await autoManager.disableMakers([maker.address]);
-      await expect(autoManager.connect(minter).mintProducts([productMint], signaturesSignature)).to.be.revertedWith("AutoManager: invalid maker");
+      await automator.disableMakers([maker.address]);
+      await expect(automator.connect(minter).mintProducts([productMint], signaturesSignature)).to.be.revertedWith("Automator: invalid maker");
     });
 
     it("should successfully burn products", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await autoManager.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automator.connect(minter).mintProducts([productMint], signaturesSignature);
       let receipt = await tx.wait();
       let collateralAtRiskPercentage;
 
@@ -237,14 +237,14 @@ describe("AutoManager", function () {
       };
       await time.increaseTo(expiry);
       await oracle.settle();
-      await expect(autoManager.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
-      expect(await autoManager.accCollateralPerShare()).to.equal(parseEther("0.097"));
+      await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
+      expect(await automator.accCollateralPerShare()).to.equal(parseEther("0.097"));
     });
 
     it("should successfully mint/burn two products", async function () {
-      await autoManager.connect(minter).deposit(ethers.utils.parseEther("100"));
+      await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
       const signaturesSignature = await signSignatures([productMint, productMintB], maker);
-      const tx = await autoManager.connect(minter).mintProducts([productMint, productMintB], signaturesSignature);
+      const tx = await automator.connect(minter).mintProducts([productMint, productMintB], signaturesSignature);
       let receipt = await tx.wait();
       let collateralAtRiskPercentage;
 
@@ -280,21 +280,21 @@ describe("AutoManager", function () {
       };
       await time.increaseTo(expiry);
       await oracle.settle();
-      await expect(autoManager.connect(minter).burnProducts([productBurn, productBurnB])).to.not.be.reverted;
-      expect(await autoManager.accCollateralPerShare()).to.equal(parseEther("0.097"));
+      await expect(automator.connect(minter).burnProducts([productBurn, productBurnB])).to.not.be.reverted;
+      expect(await automator.accCollateralPerShare()).to.equal(parseEther("0.097"));
     });
 
     it("should withdraw zero", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await autoManager.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automator.connect(minter).mintProducts([productMint], signaturesSignature);
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
-      await expect(autoManager.connect(minter).withdraw(parseEther("100"))).to.changeTokenBalance(collateral, minter, 0);
-      expect(await autoManager.totalPendingRedemptions()).to.equal(parseEther("100"));
+      await expect(automator.connect(minter).withdraw(parseEther("100"))).to.changeTokenBalance(collateral, minter, 0);
+      expect(await automator.totalPendingRedemptions()).to.equal(parseEther("100"));
     });
 
     it("should claim pending redemptions", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await autoManager.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automator.connect(minter).mintProducts([productMint], signaturesSignature);
       let receipt = await tx.wait();
       let collateralAtRiskPercentage;
 
@@ -323,17 +323,17 @@ describe("AutoManager", function () {
       await oracle.settle();
 
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
-      await expect(autoManager.connect(minter).withdraw(parseEther("99"))).to.changeTokenBalance(collateral, minter, 0);
+      await expect(automator.connect(minter).withdraw(parseEther("99"))).to.changeTokenBalance(collateral, minter, 0);
 
-      await expect(autoManager.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
-      await expect(autoManager.connect(minter).claimRedemptions()).to.changeTokenBalance(collateral, minter, parseEther("99"));
+      await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
+      await expect(automator.connect(minter).claimRedemptions()).to.changeTokenBalance(collateral, minter, parseEther("99"));
     });
   });
 
   describe("Claim RCH", function () {
     let timestampA, timestampB, amountAirdrop, anotherNode;
     beforeEach(async function () {
-      const addr = autoManager.address;
+      const addr = automator.address;
       amountAirdrop = ethers.utils.parseUnits("1", 18);
       const leaf = leafComp(addr, amountAirdrop);
       //console.log("leaf:", leaf);
@@ -355,57 +355,57 @@ describe("AutoManager", function () {
 
     it("Should successfully claim airdrop", async function () {
       const amount = parseEther("100");
-      await autoManager.connect(minter).deposit(amount);
+      await automator.connect(minter).deposit(amount);
       const indexes = [timestampA, timestampB];
       const amounts = [amountAirdrop, amountAirdrop];
       const merkleProofs = [[anotherNode], [anotherNode]];
-      await expect(autoManager.connect(minter).claimRCH(indexes, amounts, merkleProofs))
-            .to.emit(autoManager, 'RCHClaimed');
+      await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
+            .to.emit(automator, 'RCHClaimed');
     });
 
     it("Should calculate correct RCH per share", async function () {
       const amount = parseEther("100");
-      await autoManager.connect(minter).deposit(amount);
+      await automator.connect(minter).deposit(amount);
       const indexes = [timestampA, timestampB];
       const amounts = [amountAirdrop, amountAirdrop];
       const merkleProofs = [[anotherNode], [anotherNode]];
-      await expect(autoManager.connect(minter).claimRCH(indexes, amounts, merkleProofs))
-            .to.emit(autoManager, 'RCHClaimed');
-      expect(await rch.balanceOf(autoManager.address)).to.equal(amountAirdrop.mul(2));
-      expect(await autoManager.accRCHPerShare()).to.equal(parseEther("0.02"));
-      const { pendingRCH } = await autoManager.connect(minter).getUserInfo();
+      await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
+            .to.emit(automator, 'RCHClaimed');
+      expect(await rch.balanceOf(automator.address)).to.equal(amountAirdrop.mul(2));
+      expect(await automator.accRCHPerShare()).to.equal(parseEther("0.02"));
+      const { pendingRCH } = await automator.connect(minter).getUserInfo();
       expect(pendingRCH).to.equal(parseEther("2"));
     });
 
     it("Should claim RCH", async function () {
       const amount = parseEther("100");
-      await autoManager.connect(minter).deposit(amount);
+      await automator.connect(minter).deposit(amount);
       const indexes = [timestampA, timestampB];
       const amounts = [amountAirdrop, amountAirdrop];
       const merkleProofs = [[anotherNode], [anotherNode]];
-      await expect(autoManager.connect(minter).claimRCH(indexes, amounts, merkleProofs))
-            .to.emit(autoManager, 'RCHClaimed');
+      await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
+            .to.emit(automator, 'RCHClaimed');
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
-      await autoManager.connect(minter).withdraw(ethers.utils.parseEther("50"));
+      await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
       expect(await rch.balanceOf(minter.address)).to.equal(parseEther("2"));
-      const { pendingRCH } = await autoManager.connect(minter).getUserInfo();
+      const { pendingRCH } = await automator.connect(minter).getUserInfo();
       expect(pendingRCH).to.equal(parseEther("0"));
     });
 
     it("Should false by default claim interest", async function () {
       const indexes = [timestampA, timestampB];
-      expect(await autoManager.rchClaimed(indexes))
+      expect(await automator.rchClaimed(indexes))
         .to.deep.equal([false, false]);
     });
 
     it("Should true after claimInterest", async function () {
       const amount = parseEther("100");
-      await autoManager.connect(minter).deposit(amount);
+      await automator.connect(minter).deposit(amount);
       const indexes = [timestampA, timestampB];
       const amounts = [amountAirdrop, amountAirdrop];
       const merkleProofs = [[anotherNode], [anotherNode]];
-      await autoManager.claimRCH(indexes, amounts, merkleProofs);
-      expect(await autoManager.rchClaimed(indexes))
+      await automator.claimRCH(indexes, amounts, merkleProofs);
+      expect(await automator.rchClaimed(indexes))
         .to.deep.equal([true, true]);
     });
   });
