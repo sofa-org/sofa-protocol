@@ -9,6 +9,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/utils/ERC1155HolderUpgradeable.sol";
+import "../interfaces/IFeeCollector.sol";
 
 struct Product {
     uint256 expiry;
@@ -53,6 +54,8 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     uint256 public totalShares;
     uint256 public accCollateralPerShare; //1e18
     uint256 public totalPendingRedemptions;
+    uint256 public totalFee;
+    address public feeCollector;
 
     mapping(address => User) private _users;
     mapping(address => bool) private _vaults;
@@ -81,23 +84,26 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     event Withdrawn(address indexed account, uint256 amount);
     event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
     event ProductsMinted(ProductMint[] products);
-    event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare);
+    event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, uint256 fee);
     event ReferralUpdated(address refferal);
     event VaultsEnabled(address[] vaults);
     event VaultsDisabled(address[] vaults);
     event MakersEnabled(address[] makers);
     event MakersDisabled(address[] makers);
+    event FeeCollected(address account, uint256 amount);
 
     constructor() {}
 
     function initialize(
         IERC20 collateral_,
         IMerkleAirdrop airdrop_,
-        address refferal_
+        address refferal_,
+        address feeCollector_
     ) external initializer {
         collateral = collateral_;
         airdrop = airdrop_;
         refferal = refferal_;
+        feeCollector = feeCollector_;
         accCollateralPerShare = 1e18;
         __Ownable_init();
         __ERC1155Holder_init();
@@ -174,14 +180,23 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     ) external {
         uint256 totalEarned;
         uint256 totalPositions;
+        uint256 fee;
         for (uint256 i = 0; i < products.length; i++) {
             uint256 balanceBefore = collateral.balanceOf(address(this));
             IVault(products[i].vault).burnBatch(products[i].products);
             uint256 balanceAfter = collateral.balanceOf(address(this));
-            totalEarned += balanceAfter - balanceBefore;
+            uint256 earned = balanceAfter - balanceBefore;
+            totalEarned += earned;
             bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[0].expiry, products[i].products[0].anchorPrices));
             totalPositions += _positions[id];
+            if (earned > _positions[id]) {
+                fee += (earned - _positions[id]) * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+            }
             delete _positions[id];
+        }
+        if (fee > 0) {
+            totalFee += fee;
+            totalEarned -= fee;
         }
         if (totalEarned > totalPositions) {
             accCollateralPerShare += (totalEarned - totalPositions) * 1e18 / totalShares;
@@ -189,7 +204,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
             accCollateralPerShare -= (totalPositions - totalEarned) * 1e18 / totalShares;
         }
 
-        emit ProductsBurned(products, accCollateralPerShare);
+        emit ProductsBurned(products, accCollateralPerShare, fee);
     }
 
     function _mintShares(address account, uint256 sharesAmount) internal {
@@ -200,6 +215,15 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     function _burnShares(address account, uint256 amount) internal {
         totalShares = totalShares - amount;
         _users[account].shares = _users[account].shares - amount;
+    }
+
+    function harvest() external {
+        uint256 fee = totalFee;
+        require(fee > 0, "Vault: zero fee");
+        totalFee = 0;
+        collateral.safeTransfer(feeCollector, fee);
+
+        emit FeeCollected(_msgSender(), fee);
     }
 
     function updateRefferal(address refferal_) external onlyOwner {

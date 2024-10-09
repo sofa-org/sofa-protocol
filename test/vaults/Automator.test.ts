@@ -75,7 +75,8 @@ describe("Automator", function () {
     automator = await upgrades.deployProxy(Automator, [
       collateral.address,
       airdrop.address,
-      referral.address
+      referral.address,
+      feeCollector.address,
     ]);
 
     await collateral.connect(minter).approve(automator.address, constants.MaxUint256); // approve max
@@ -237,7 +238,8 @@ describe("Automator", function () {
       await time.increaseTo(expiry);
       await oracle.settle();
       await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
-      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.097"));
+      expect(await automator.totalFee()).to.equal(parseEther("0.097"));
+      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.09603"));
     });
 
     it("should successfully mint/burn two products", async function () {
@@ -280,7 +282,11 @@ describe("Automator", function () {
       await time.increaseTo(expiry);
       await oracle.settle();
       await expect(automator.connect(minter).burnProducts([productBurn, productBurnB])).to.not.be.reverted;
-      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.097"));
+      expect(await automator.totalFee()).to.equal(parseEther("0.194"));
+      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.09603"));
+
+      await expect(automator.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("0.194"));
+      expect(await automator.totalFee()).to.equal(0);
     });
 
     it("should withdraw zero", async function () {
