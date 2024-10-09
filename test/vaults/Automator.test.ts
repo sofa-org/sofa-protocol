@@ -15,7 +15,7 @@ import {
 } from "../helpers/helpers";
 
 describe("Automator", function () {
-  let collateral, feeCollector, oracle, owner, minter, maker, referral, vaultA, vaultB, eip721DomainA, eip721DomainB, aggregator, rch, airdrop, atoken, aavePool, automator;
+  let collateral, feeCollector, oracle, owner, minter, maker, referral, vaultA, vaultB, eip721DomainA, eip721DomainB, aggregator, airdrop, atoken, aavePool, automator;
   beforeEach(async function () {
     ({
       collateral,
@@ -26,7 +26,6 @@ describe("Automator", function () {
       minter,
       maker,
       referral,
-      rch,
       airdrop,
       atoken,
       aavePool,
@@ -74,7 +73,6 @@ describe("Automator", function () {
     // Automator contract
     const Automator = await ethers.getContractFactory("Automator");
     automator = await upgrades.deployProxy(Automator, [
-      rch.address,
       collateral.address,
       airdrop.address,
       referral.address
@@ -87,7 +85,6 @@ describe("Automator", function () {
 
   describe("Initialization", function () {
     it("Should initialize with correct parameters", async function () {
-      expect(await automator.rch()).to.equal(rch.address);
       expect(await automator.collateral()).to.equal(collateral.address);
       expect(await automator.airdrop()).to.equal(airdrop.address);
       expect(await automator.refferal()).to.equal(referral.address);
@@ -100,21 +97,23 @@ describe("Automator", function () {
       const amount = parseEther("100");
       await expect(automator.connect(minter).deposit(amount)).to.emit(automator, "Deposited");
       expect(await collateral.balanceOf(automator.address)).to.be.equal(amount);
-      const { shares }  = await automator.connect(minter).getUserInfo()
-      expect(shares).to.equal(amount);
+      expect(await automator.balanceOf(minter.address)).to.equal(amount);
     });
 
-    it("Should not allow withdraw within 7 days of deposit", async function () {
+    it("Can't claim when less than 7 days after withdraw", async function () {
       await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
-      await expect(automator.connect(minter).withdraw(ethers.utils.parseEther("50"))).to.be.revertedWith("Automator: can't withdraw within 7 days of deposit");
-    });
-
-    it("Should allow withdraw after 7 days", async function () {
-      await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
-      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
       await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
-      const { shares }  = await automator.connect(minter).getUserInfo()
-      expect(shares).to.equal(ethers.utils.parseEther("50"));
+      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 6]); // Fast forward 7 days
+      await expect(automator.connect(minter).claimRedemptions()).to.be.reverted;
+    });
+
+    it("Should claim when 7 days after withdraw", async function () {
+      await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
+      await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
+      expect(await automator.balanceOf(minter.address)).to.equal(ethers.utils.parseEther("100"));
+      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
+      await expect(automator.connect(minter).claimRedemptions()).to.changeTokenBalance(collateral, minter, ethers.utils.parseEther("50"));
+      expect(await automator.balanceOf(minter.address)).to.equal(ethers.utils.parseEther("50"));
     });
   });
 
@@ -287,7 +286,7 @@ describe("Automator", function () {
     it("should withdraw zero", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       const tx = await automator.connect(minter).mintProducts([productMint], signaturesSignature);
-      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
+      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
       await expect(automator.connect(minter).withdraw(parseEther("100"))).to.changeTokenBalance(collateral, minter, 0);
       expect(await automator.totalPendingRedemptions()).to.equal(parseEther("100"));
     });
@@ -322,91 +321,91 @@ describe("Automator", function () {
       await time.increaseTo(expiry);
       await oracle.settle();
 
-      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
       await expect(automator.connect(minter).withdraw(parseEther("99"))).to.changeTokenBalance(collateral, minter, 0);
+      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
 
       await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
       await expect(automator.connect(minter).claimRedemptions()).to.changeTokenBalance(collateral, minter, parseEther("99"));
     });
   });
 
-  describe("Claim RCH", function () {
-    let timestampA, timestampB, amountAirdrop, anotherNode;
-    beforeEach(async function () {
-      const addr = automator.address;
-      amountAirdrop = ethers.utils.parseUnits("1", 18);
-      const leaf = leafComp(addr, amountAirdrop);
-      //console.log("leaf:", leaf);
-      anotherNode = '0x1daab6e461c57679d093fe722a8bf8ba48798a5a9386000d2176d175bc5fae57';
-      const merkleRoot = nodeComp(leaf, anotherNode);
-      //console.log("merkleRoot:", merkleRoot);
-      // yesterday 12am timestamp
-      let currentDate = new Date();
-      currentDate.setDate(currentDate.getDate());
-      currentDate.setUTCHours(0, 0, 0, 0);
-      timestampA = Math.floor(currentDate.getTime() / 1000);
-      await airdrop.connect(owner).setMerkleRoot(timestampA, merkleRoot);
-      let yesterdayDate = new Date();
-      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-      yesterdayDate.setUTCHours(0, 0, 0, 0);
-      timestampB = Math.floor(yesterdayDate.getTime() / 1000);
-      await airdrop.connect(owner).setMerkleRoot(timestampB, merkleRoot);
-    });
+  // describe("Claim RCH", function () {
+  //   let timestampA, timestampB, amountAirdrop, anotherNode;
+  //   beforeEach(async function () {
+  //     const addr = automator.address;
+  //     amountAirdrop = ethers.utils.parseUnits("1", 18);
+  //     const leaf = leafComp(addr, amountAirdrop);
+  //     //console.log("leaf:", leaf);
+  //     anotherNode = '0x1daab6e461c57679d093fe722a8bf8ba48798a5a9386000d2176d175bc5fae57';
+  //     const merkleRoot = nodeComp(leaf, anotherNode);
+  //     //console.log("merkleRoot:", merkleRoot);
+  //     // yesterday 12am timestamp
+  //     let currentDate = new Date();
+  //     currentDate.setDate(currentDate.getDate());
+  //     currentDate.setUTCHours(0, 0, 0, 0);
+  //     timestampA = Math.floor(currentDate.getTime() / 1000);
+  //     await airdrop.connect(owner).setMerkleRoot(timestampA, merkleRoot);
+  //     let yesterdayDate = new Date();
+  //     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  //     yesterdayDate.setUTCHours(0, 0, 0, 0);
+  //     timestampB = Math.floor(yesterdayDate.getTime() / 1000);
+  //     await airdrop.connect(owner).setMerkleRoot(timestampB, merkleRoot);
+  //   });
 
-    it("Should successfully claim airdrop", async function () {
-      const amount = parseEther("100");
-      await automator.connect(minter).deposit(amount);
-      const indexes = [timestampA, timestampB];
-      const amounts = [amountAirdrop, amountAirdrop];
-      const merkleProofs = [[anotherNode], [anotherNode]];
-      await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
-            .to.emit(automator, 'RCHClaimed');
-    });
+  //   it("Should successfully claim airdrop", async function () {
+  //     const amount = parseEther("100");
+  //     await automator.connect(minter).deposit(amount);
+  //     const indexes = [timestampA, timestampB];
+  //     const amounts = [amountAirdrop, amountAirdrop];
+  //     const merkleProofs = [[anotherNode], [anotherNode]];
+  //     await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
+  //           .to.emit(automator, 'RCHClaimed');
+  //   });
 
-    it("Should calculate correct RCH per share", async function () {
-      const amount = parseEther("100");
-      await automator.connect(minter).deposit(amount);
-      const indexes = [timestampA, timestampB];
-      const amounts = [amountAirdrop, amountAirdrop];
-      const merkleProofs = [[anotherNode], [anotherNode]];
-      await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
-            .to.emit(automator, 'RCHClaimed');
-      expect(await rch.balanceOf(automator.address)).to.equal(amountAirdrop.mul(2));
-      expect(await automator.accRCHPerShare()).to.equal(parseEther("0.02"));
-      const { pendingRCH } = await automator.connect(minter).getUserInfo();
-      expect(pendingRCH).to.equal(parseEther("2"));
-    });
+  //   it("Should calculate correct RCH per share", async function () {
+  //     const amount = parseEther("100");
+  //     await automator.connect(minter).deposit(amount);
+  //     const indexes = [timestampA, timestampB];
+  //     const amounts = [amountAirdrop, amountAirdrop];
+  //     const merkleProofs = [[anotherNode], [anotherNode]];
+  //     await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
+  //           .to.emit(automator, 'RCHClaimed');
+  //     expect(await rch.balanceOf(automator.address)).to.equal(amountAirdrop.mul(2));
+  //     expect(await automator.accRCHPerShare()).to.equal(parseEther("0.02"));
+  //     const { pendingRCH } = await automator.connect(minter).getUserInfo();
+  //     expect(pendingRCH).to.equal(parseEther("2"));
+  //   });
 
-    it("Should claim RCH", async function () {
-      const amount = parseEther("100");
-      await automator.connect(minter).deposit(amount);
-      const indexes = [timestampA, timestampB];
-      const amounts = [amountAirdrop, amountAirdrop];
-      const merkleProofs = [[anotherNode], [anotherNode]];
-      await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
-            .to.emit(automator, 'RCHClaimed');
-      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 8]); // Fast forward 8 days
-      await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
-      expect(await rch.balanceOf(minter.address)).to.equal(parseEther("2"));
-      const { pendingRCH } = await automator.connect(minter).getUserInfo();
-      expect(pendingRCH).to.equal(parseEther("0"));
-    });
+  //   it("Should claim RCH", async function () {
+  //     const amount = parseEther("100");
+  //     await automator.connect(minter).deposit(amount);
+  //     const indexes = [timestampA, timestampB];
+  //     const amounts = [amountAirdrop, amountAirdrop];
+  //     const merkleProofs = [[anotherNode], [anotherNode]];
+  //     await expect(automator.connect(minter).claimRCH(indexes, amounts, merkleProofs))
+  //           .to.emit(automator, 'RCHClaimed');
+  //     await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
+  //     await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
+  //     expect(await rch.balanceOf(minter.address)).to.equal(parseEther("2"));
+  //     const { pendingRCH } = await automator.connect(minter).getUserInfo();
+  //     expect(pendingRCH).to.equal(parseEther("0"));
+  //   });
 
-    it("Should false by default claim interest", async function () {
-      const indexes = [timestampA, timestampB];
-      expect(await automator.rchClaimed(indexes))
-        .to.deep.equal([false, false]);
-    });
+  //   it("Should false by default claim interest", async function () {
+  //     const indexes = [timestampA, timestampB];
+  //     expect(await automator.rchClaimed(indexes))
+  //       .to.deep.equal([false, false]);
+  //   });
 
-    it("Should true after claimInterest", async function () {
-      const amount = parseEther("100");
-      await automator.connect(minter).deposit(amount);
-      const indexes = [timestampA, timestampB];
-      const amounts = [amountAirdrop, amountAirdrop];
-      const merkleProofs = [[anotherNode], [anotherNode]];
-      await automator.claimRCH(indexes, amounts, merkleProofs);
-      expect(await automator.rchClaimed(indexes))
-        .to.deep.equal([true, true]);
-    });
-  });
+  //   it("Should true after claimInterest", async function () {
+  //     const amount = parseEther("100");
+  //     await automator.connect(minter).deposit(amount);
+  //     const indexes = [timestampA, timestampB];
+  //     const amounts = [amountAirdrop, amountAirdrop];
+  //     const merkleProofs = [[anotherNode], [anotherNode]];
+  //     await automator.claimRCH(indexes, amounts, merkleProofs);
+  //     expect(await automator.rchClaimed(indexes))
+  //       .to.deep.equal([true, true]);
+  //   });
+  // });
 })
