@@ -18,8 +18,10 @@ describe("RCH", function () {
     const WETH = await ethers.getContractFactory("MockWETH9");
     const weth = await WETH.deploy();
 
+    // block time
+    const block = await ethers.provider.getBlock("latest");
     // tomorrow timestmap
-    const tradingStartTime = Math.floor(new Date().getTime() / 1000 + 60 * 60 * 24); // 1 day later
+    const tradingStartTime = block.timestamp + 60 * 60 * 24;
     // rch contract
     const RCH = await ethers.getContractFactory("RCH");
     const rch = await RCH.deploy(tradingStartTime);

@@ -23,6 +23,12 @@ describe("HlOracle", function () {
     const { oracle, aggregator } = await loadFixture(deployFixture);
 
     await expect(oracle.checkUpkeep('0x')).to.be.revertedWith('Oracle: not updated');
+    // today 8:00 UTC+0
+    const currentDate = new Date();
+    currentDate.setUTCHours(8, 0, 0, 0);
+    const timestamp = Math.floor(currentDate.getTime() / 1000);
+    await time.increaseTo(timestamp);
+
     await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
     // return [ true, '0x']
     expect(await oracle.checkUpkeep('0x')).to.deep.equal([ true, '0x' ]);
@@ -31,6 +37,11 @@ describe("HlOracle", function () {
 
   it("should assign prices for missed days correctly", async function () {
     const { oracle, aggregator } = await loadFixture(deployFixture);
+    // today 8:00 UTC+0
+    const currentDate = new Date();
+    currentDate.setUTCHours(8, 0, 0, 0);
+    const timestamp = Math.floor(currentDate.getTime() / 1000);
+    await time.increaseTo(timestamp);
     //30000, 32000
     await aggregator.setLatestResponse("0x00000000000000000000000000000000000000000000065a4da25d3016c000000000000000000000000000000000000000000000000006c6b935b8bbd4000000");
     expect(await oracle.checkUpkeep('0x')).to.deep.equal([ true, '0x' ]);
