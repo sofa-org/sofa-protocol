@@ -111,17 +111,33 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function deposit(uint256 amount) external {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
-        uint256 pendingCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18 - _users[_msgSender()].accCollateral;
-        _mintShares(_msgSender(), amount + pendingCollateral);
+        uint256 unrealizedAccCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18;
+        if (unrealizedAccCollateral >= _users[_msgSender()].accCollateral) {
+            uint256 pendingCollateral = unrealizedAccCollateral - _users[_msgSender()].accCollateral;
+            _mintShares(_msgSender(), amount + pendingCollateral);
+        } else {
+            uint256 pendingCollateral = _users[_msgSender()].accCollateral - unrealizedAccCollateral;
+            if (pendingCollateral > amount) {
+                _burnShares(_msgSender(), pendingCollateral - amount);
+            } else if (pendingCollateral < amount) {
+                _mintShares(_msgSender(), amount - pendingCollateral);
+            }
+        }
         _users[_msgSender()].accCollateral = _users[_msgSender()].shares  * accCollateralPerShare / 1e18;
 
-        emit Deposited(_msgSender(), amount, amount + pendingCollateral);
+        emit Deposited(_msgSender(), amount, _users[_msgSender()].shares);
     }
 
     function withdraw(uint256 amount) external {
         require(_users[_msgSender()].pendingRedemption == 0, "Automator: pending redemption");
-        uint256 pendingCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18 - _users[_msgSender()].accCollateral;
-        require(_users[_msgSender()].shares + pendingCollateral >= amount, "Automator: insufficient balance");
+        uint256 unrealizedAccCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18;
+        if (unrealizedAccCollateral >= _users[_msgSender()].accCollateral) {
+            uint256 pendingCollateral = unrealizedAccCollateral - _users[_msgSender()].accCollateral;
+            require(_users[_msgSender()].shares + pendingCollateral >= amount, "Automator: insufficient balance");
+        } else {
+            uint256 pendingCollateral = _users[_msgSender()].accCollateral - unrealizedAccCollateral;
+            require(_users[_msgSender()].shares - pendingCollateral >= amount, "Automator: insufficient balance");
+        }
 
         _users[_msgSender()].pendingRedemption = amount;
         _users[_msgSender()].redemptionRequestTimestamp = block.timestamp;
@@ -136,14 +152,24 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         uint256 pendingRedemption = _users[_msgSender()].pendingRedemption;
         require(collateral.balanceOf(address(this)) >= pendingRedemption, "Automator: no enough collateral to redeem");
 
-        uint256 pendingCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18 - _users[_msgSender()].accCollateral;
-        if (pendingCollateral > pendingRedemption) {
-            _mintShares(_msgSender(), pendingCollateral - pendingRedemption);
-        } else if (pendingCollateral < pendingRedemption) {
-            _burnShares(_msgSender(), pendingRedemption - pendingCollateral);
+        uint256 unrealizedAccCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18;
+        if (unrealizedAccCollateral >= _users[_msgSender()].accCollateral) {
+            uint256 pendingCollateral = unrealizedAccCollateral - _users[_msgSender()].accCollateral;
+            if (pendingCollateral > pendingRedemption) {
+                _mintShares(_msgSender(), pendingCollateral - pendingRedemption);
+            } else if (pendingCollateral < pendingRedemption) {
+                _burnShares(_msgSender(), pendingRedemption - pendingCollateral);
+            }
+        } else {
+            uint256 pendingCollateral = _users[_msgSender()].accCollateral - unrealizedAccCollateral;
+            if (_users[_msgSender()].shares >= pendingRedemption + pendingCollateral) {
+                _burnShares(_msgSender(), pendingRedemption + pendingCollateral);
+            } else {
+                pendingRedemption = _users[_msgSender()].shares;
+                _burnShares(_msgSender(), _users[_msgSender()].shares);
+            }
         }
         _users[_msgSender()].accCollateral = _users[_msgSender()].shares  * accCollateralPerShare / 1e18;
-
 
         totalPendingRedemptions -= pendingRedemption;
         collateral.safeTransfer(_msgSender(), pendingRedemption);
