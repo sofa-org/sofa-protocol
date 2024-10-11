@@ -239,7 +239,7 @@ describe("Automator", function () {
       await oracle.settle();
       await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
       expect(await automator.totalFee()).to.equal(parseEther("0.097"));
-      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.09603"));
+      expect(await automator.getPricePerShare()).to.equal(parseEther("1.09603"));
     });
 
     it("should successfully mint/burn two products", async function () {
@@ -283,7 +283,7 @@ describe("Automator", function () {
       await oracle.settle();
       await expect(automator.connect(minter).burnProducts([productBurn, productBurnB])).to.not.be.reverted;
       expect(await automator.totalFee()).to.equal(parseEther("0.194"));
-      expect(await automator.accCollateralPerShare()).to.equal(parseEther("1.09603"));
+      expect(await automator.getPricePerShare()).to.equal(parseEther("1.09603"));
 
       await expect(automator.harvest()).to.changeTokenBalance(collateral, feeCollector, parseEther("0.194"));
       expect(await automator.totalFee()).to.equal(0);
@@ -327,11 +327,11 @@ describe("Automator", function () {
       await time.increaseTo(expiry);
       await oracle.settle();
 
-      await expect(automator.connect(minter).withdraw(parseEther("99"))).to.changeTokenBalance(collateral, minter, 0);
+      await expect(automator.connect(minter).withdraw(parseEther("100"))).to.changeTokenBalance(collateral, minter, 0);
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
 
       await expect(automator.connect(minter).burnProducts([productBurn])).to.not.be.reverted;
-      await expect(automator.connect(minter).claimRedemptions()).to.changeTokenBalance(collateral, minter, parseEther("99"));
+      await expect(automator.connect(minter).claimRedemptions()).to.changeTokenBalance(collateral, minter, parseEther("109.603"));
     });
   });
 

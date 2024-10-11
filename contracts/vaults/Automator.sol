@@ -3,12 +3,14 @@
 pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/utils/ERC1155HolderUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "../interfaces/IFeeCollector.sol";
 
 struct Product {
@@ -43,7 +45,7 @@ interface IMerkleAirdrop {
     function claimMultiple(uint256[] calldata indexes, uint256[] calldata amounts, bytes32[][] calldata merkleProofs) external;
 }
 
-contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable {
+contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable, ERC20Upgradeable {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
@@ -51,20 +53,17 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     IMerkleAirdrop public airdrop;
     address public refferal;
 
-    uint256 public totalShares;
-    uint256 public accCollateralPerShare; //1e18
-    uint256 public totalPendingRedemptions;
     uint256 public totalFee;
     address public feeCollector;
+    uint256 public totalPendingRedemptions;
+    uint256 public totalCollateral;
 
-    mapping(address => User) private _users;
     mapping(address => bool) private _vaults;
     mapping(address => bool) private _makers;
     mapping(bytes32 => uint256) private _positions;
+    mapping(address => Redemption) private _redemptions;
 
-    struct User {
-        uint256 shares;
-        uint256 accCollateral;
+    struct Redemption {
         uint256 pendingRedemption;
         uint256 redemptionRequestTimestamp;
     }
@@ -104,81 +103,48 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         airdrop = airdrop_;
         refferal = refferal_;
         feeCollector = feeCollector_;
-        accCollateralPerShare = 1e18;
         __Ownable_init();
         __ERC1155Holder_init();
     }
 
     function deposit(uint256 amount) external {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
-        uint256 unrealizedAccCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18;
-        if (unrealizedAccCollateral >= _users[_msgSender()].accCollateral) {
-            uint256 pendingCollateral = unrealizedAccCollateral - _users[_msgSender()].accCollateral;
-            _mintShares(_msgSender(), amount + pendingCollateral);
+        uint256 shares;
+        if (totalSupply() == 0) {
+            shares = amount;
         } else {
-            uint256 pendingCollateral = _users[_msgSender()].accCollateral - unrealizedAccCollateral;
-            if (pendingCollateral > amount) {
-                _burnShares(_msgSender(), pendingCollateral - amount);
-            } else if (pendingCollateral < amount) {
-                _mintShares(_msgSender(), amount - pendingCollateral);
-            }
+            shares = amount * totalSupply() / totalCollateral;
         }
-        _users[_msgSender()].accCollateral = _users[_msgSender()].shares  * accCollateralPerShare / 1e18;
-
-        emit Deposited(_msgSender(), amount, _users[_msgSender()].shares);
+        totalCollateral += amount;
+        _mint(_msgSender(), shares);
+        emit Deposited(_msgSender(), amount, shares);
     }
 
-    function withdraw(uint256 amount) external {
-        require(_users[_msgSender()].pendingRedemption == 0, "Automator: pending redemption");
-        uint256 unrealizedAccCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18;
-        if (unrealizedAccCollateral >= _users[_msgSender()].accCollateral) {
-            uint256 pendingCollateral = unrealizedAccCollateral - _users[_msgSender()].accCollateral;
-            require(_users[_msgSender()].shares + pendingCollateral >= amount, "Automator: insufficient balance");
-        } else {
-            uint256 pendingCollateral = _users[_msgSender()].accCollateral - unrealizedAccCollateral;
-            require(_users[_msgSender()].shares - pendingCollateral >= amount, "Automator: insufficient balance");
-        }
+    function withdraw(uint256 shares) external {
+        require(_redemptions[_msgSender()].pendingRedemption == 0, "Automator: pending redemption");
+        require(balanceOf(_msgSender()) >= shares, "Automator: insufficient shares");
+        _redemptions[_msgSender()].pendingRedemption = shares;
+        _redemptions[_msgSender()].redemptionRequestTimestamp = block.timestamp;
+        totalPendingRedemptions += shares;
 
-        _users[_msgSender()].pendingRedemption = amount;
-        _users[_msgSender()].redemptionRequestTimestamp = block.timestamp;
-        totalPendingRedemptions += amount;
-
-        emit Withdrawn(_msgSender(), amount);
+        emit Withdrawn(_msgSender(), shares);
     }
 
     function claimRedemptions() external {
-        require(block.timestamp >= _users[_msgSender()].redemptionRequestTimestamp + 7 days, "Automator: early redemption");
+        require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days, "Automator: early redemption");
 
-        uint256 pendingRedemption = _users[_msgSender()].pendingRedemption;
-        uint256 unrealizedAccCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18;
-        if (unrealizedAccCollateral >= _users[_msgSender()].accCollateral) {
-            uint256 pendingCollateral = unrealizedAccCollateral - _users[_msgSender()].accCollateral;
-            if (pendingCollateral > pendingRedemption) {
-                _mintShares(_msgSender(), pendingCollateral - pendingRedemption);
-            } else if (pendingCollateral < pendingRedemption) {
-                if (_users[_msgSender()].shares >= pendingRedemption - pendingCollateral) {
-                    _burnShares(_msgSender(), pendingRedemption - pendingCollateral);
-                } else {
-                    pendingRedemption = _users[_msgSender()].shares;
-                    _burnShares(_msgSender(), _users[_msgSender()].shares);
-                }
-            }
-        } else {
-            uint256 pendingCollateral = _users[_msgSender()].accCollateral - unrealizedAccCollateral;
-            if (_users[_msgSender()].shares >= pendingRedemption + pendingCollateral) {
-                _burnShares(_msgSender(), pendingRedemption + pendingCollateral);
-            } else {
-                pendingRedemption = _users[_msgSender()].shares;
-                _burnShares(_msgSender(), _users[_msgSender()].shares);
-            }
-        }
-        _users[_msgSender()].accCollateral = _users[_msgSender()].shares  * accCollateralPerShare / 1e18;
-        require(collateral.balanceOf(address(this)) >= pendingRedemption, "Automator: no enough collateral to redeem");
+        uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
+        uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
+        require(collateral.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
 
         totalPendingRedemptions -= pendingRedemption;
-        collateral.safeTransfer(_msgSender(), pendingRedemption);
+        _redemptions[_msgSender()].pendingRedemption = 0;
+        totalCollateral -= amount;
 
-        emit RedemptionsClaimed(_msgSender(), pendingRedemption, _users[_msgSender()].shares);
+        _burn(_msgSender(), pendingRedemption);
+        collateral.safeTransfer(_msgSender(), amount);
+
+        emit RedemptionsClaimed(_msgSender(), amount, pendingRedemption);
     }
 
     function mintProducts(
@@ -229,22 +195,12 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
             totalEarned -= fee;
         }
         if (totalEarned > totalPositions) {
-            accCollateralPerShare += (totalEarned - totalPositions) * 1e18 / totalShares;
+            totalCollateral += totalEarned - totalPositions;
         } else if (totalEarned < totalPositions) {
-            accCollateralPerShare -= (totalPositions - totalEarned) * 1e18 / totalShares;
+            totalCollateral -= totalPositions - totalEarned;
         }
 
-        emit ProductsBurned(products, accCollateralPerShare, fee);
-    }
-
-    function _mintShares(address account, uint256 sharesAmount) internal {
-        totalShares = totalShares + sharesAmount;
-        _users[account].shares = _users[account].shares + sharesAmount;
-    }
-
-    function _burnShares(address account, uint256 amount) internal {
-        totalShares = totalShares - amount;
-        _users[account].shares = _users[account].shares - amount;
+        emit ProductsBurned(products, totalCollateral, fee);
     }
 
     function harvest() external {
@@ -291,20 +247,22 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         emit MakersDisabled(makers_);
     }
 
-    function getUserInfo() external view returns (
-        uint256 shares,
-        uint256 pendingCollateral,
-        uint256 pendingRedemption,
-        uint256 redemptionRequestTimestamp
-    )
-    {
-        shares = _users[_msgSender()].shares;
-        pendingCollateral = _users[_msgSender()].shares * accCollateralPerShare / 1e18 - _users[_msgSender()].accCollateral;
-        pendingRedemption = _users[_msgSender()].pendingRedemption;
-        redemptionRequestTimestamp = _users[_msgSender()].redemptionRequestTimestamp;
+    function decimals() public view virtual override returns (uint8) {
+        return IERC20Metadata(address(collateral)).decimals();
     }
 
-    function balanceOf(address account) external view returns (uint256) {
-        return _users[_msgSender()].shares + _users[account].shares * accCollateralPerShare / 1e18 - _users[_msgSender()].accCollateral;
+    function getRedemption() external view returns (uint256, uint256) {
+        return (_redemptions[_msgSender()].pendingRedemption, _redemptions[_msgSender()].redemptionRequestTimestamp);
+    }
+
+    function getPricePerShare() public view returns (uint256) {
+        return totalCollateral * 1e18 / totalSupply();
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
+        if (from != address(0)) {
+            require(balanceOf(from) >= amount + _redemptions[from].pendingRedemption, "Automator: invalid transfer amount");
+        }
+        super._beforeTokenTransfer(from, to, amount);
     }
 }
