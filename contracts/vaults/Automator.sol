@@ -94,17 +94,21 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     constructor() {}
 
     function initialize(
-        IERC20 collateral_,
+        address collateral_,
         IMerkleAirdrop airdrop_,
         address refferal_,
         address feeCollector_
     ) external initializer {
-        collateral = collateral_;
+        collateral = IERC20(collateral_);
         airdrop = airdrop_;
         refferal = refferal_;
         feeCollector = feeCollector_;
         __Ownable_init();
         __ERC1155Holder_init();
+        __ERC20_init(
+            string(abi.encodePacked("Automator ", IERC20Metadata(collateral_).name())),
+            string(abi.encodePacked("at", IERC20Metadata(collateral_).symbol()))
+        );
     }
 
     function deposit(uint256 amount) external {
