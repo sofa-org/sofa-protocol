@@ -135,6 +135,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     }
 
     function claimRedemptions() external {
+        require(_redemptions[_msgSender()].pendingRedemption > 0, "Automator: no pending redemption");
         require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days, "Automator: early redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
