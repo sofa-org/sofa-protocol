@@ -74,7 +74,6 @@ describe("Automator", function () {
     const Automator = await ethers.getContractFactory("Automator");
     automator = await upgrades.deployProxy(Automator, [
       collateral.address,
-      airdrop.address,
       referral.address,
       feeCollector.address,
     ]);
@@ -87,7 +86,6 @@ describe("Automator", function () {
   describe("Initialization", function () {
     it("Should initialize with correct parameters", async function () {
       expect(await automator.collateral()).to.equal(collateral.address);
-      expect(await automator.airdrop()).to.equal(airdrop.address);
       expect(await automator.refferal()).to.equal(referral.address);
     });
   });

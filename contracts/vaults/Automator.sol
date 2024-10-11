@@ -40,18 +40,12 @@ interface IVault {
     function burnBatch(Product[] calldata products) external;
 }
 
-interface IMerkleAirdrop {
-    function isClaimed(uint256[] calldata indexes) external view returns (bool[] memory);
-    function claimMultiple(uint256[] calldata indexes, uint256[] calldata amounts, bytes32[][] calldata merkleProofs) external;
-}
-
 contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable, ERC20Upgradeable {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
-    IERC20 public collateral;
-    IMerkleAirdrop public airdrop;
     address public refferal;
+    IERC20 public collateral;
 
     uint256 public totalFee;
     address public feeCollector;
@@ -95,12 +89,10 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function initialize(
         address collateral_,
-        IMerkleAirdrop airdrop_,
         address refferal_,
         address feeCollector_
     ) external initializer {
         collateral = IERC20(collateral_);
-        airdrop = airdrop_;
         refferal = refferal_;
         feeCollector = feeCollector_;
         __Ownable_init();
