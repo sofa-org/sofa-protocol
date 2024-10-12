@@ -52,8 +52,8 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     uint256 public totalPendingRedemptions;
     uint256 public totalCollateral;
 
-    mapping(address => bool) private _vaults;
-    mapping(address => bool) private _makers;
+    mapping(address => bool) public vaults;
+    mapping(address => bool) public makers;
     mapping(bytes32 => uint256) private _positions;
     mapping(address => Redemption) private _redemptions;
 
@@ -74,7 +74,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     }
 
     event Deposited(address indexed account, uint256 amount, uint256 shares);
-    event Withdrawn(address indexed account, uint256 amount);
+    event Withdrawn(address indexed account, uint256 shares);
     event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
     event ProductsMinted(ProductMint[] products);
     event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, uint256 fee);
@@ -150,7 +150,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     ) external {
         bytes32 signatures;
         for (uint256 i = 0; i < products.length; i++) {
-            require(_vaults[products[i].vault], "Automator: invalid vault");
+            require(vaults[products[i].vault], "Automator: invalid vault");
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
                 products[i].mintParams,
@@ -162,7 +162,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         }
 
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
-        require(_makers[signer], "Automator: invalid maker");
+        require(makers[signer], "Automator: invalid maker");
         require(collateral.balanceOf(address(this)) >= totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
 
         emit ProductsMinted(products);
@@ -216,7 +216,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function enableVaults(address[] calldata vaults_) external onlyOwner {
         for (uint256 i = 0; i < vaults_.length; i++) {
-            _vaults[vaults_[i]] = true;
+            vaults[vaults_[i]] = true;
             collateral.approve(vaults_[i], type(uint256).max);
         }
         emit VaultsEnabled(vaults_);
@@ -224,7 +224,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function disableVaults(address[] calldata vaults_) external onlyOwner {
         for (uint256 i = 0; i < vaults_.length; i++) {
-            _vaults[vaults_[i]] = false;
+            vaults[vaults_[i]] = false;
             collateral.approve(vaults_[i], 0);
         }
         emit VaultsDisabled(vaults_);
@@ -232,14 +232,14 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function enableMakers(address[] calldata makers_) external onlyOwner {
         for (uint256 i = 0; i < makers_.length; i++) {
-            _makers[makers_[i]] = true;
+            makers[makers_[i]] = true;
         }
         emit MakersEnabled(makers_);
     }
 
     function disableMakers(address[] calldata makers_) external onlyOwner {
         for (uint256 i = 0; i < makers_.length; i++) {
-            _makers[makers_[i]] = false;
+            makers[makers_[i]] = false;
         }
         emit MakersDisabled(makers_);
     }
