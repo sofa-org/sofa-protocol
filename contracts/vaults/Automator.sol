@@ -85,8 +85,6 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     event MakersDisabled(address[] makers);
     event FeeCollected(address account, uint256 amount);
 
-    constructor() {}
-
     function initialize(
         address collateral_,
         address refferal_,
@@ -202,7 +200,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function harvest() external {
         uint256 fee = totalFee;
-        require(fee > 0, "Vault: zero fee");
+        require(fee > 0, "Automator: zero fee");
         totalFee = 0;
         collateral.safeTransfer(feeCollector, fee);
 
@@ -253,7 +251,11 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     }
 
     function getPricePerShare() public view returns (uint256) {
-        return totalCollateral * 1e18 / totalSupply();
+        if (totalSupply() == 0) {
+            return 1e18;
+        } else {
+            return totalCollateral * 1e18 / totalSupply();
+        }
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
