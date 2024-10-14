@@ -44,7 +44,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
-    address public refferal;
+    address public referral;
     IERC20 public collateral;
 
     uint256 public totalFee;
@@ -78,7 +78,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
     event ProductsMinted(ProductMint[] products);
     event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, uint256 fee);
-    event ReferralUpdated(address refferal);
+    event ReferralUpdated(address referral);
     event VaultsEnabled(address[] vaults);
     event VaultsDisabled(address[] vaults);
     event MakersEnabled(address[] makers);
@@ -87,11 +87,11 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function initialize(
         address collateral_,
-        address refferal_,
+        address referral_,
         address feeCollector_
     ) external initializer {
         collateral = IERC20(collateral_);
-        refferal = refferal_;
+        referral = referral_;
         feeCollector = feeCollector_;
         __Ownable_init();
         __ERC1155Holder_init();
@@ -152,7 +152,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
                 products[i].mintParams,
-                refferal
+                referral
             );
             bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices));
             _positions[id] = _positions[id] + products[i].totalCollateral - products[i].mintParams.makerCollateral;
@@ -207,9 +207,9 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         emit FeeCollected(_msgSender(), fee);
     }
 
-    function updateRefferal(address refferal_) external onlyOwner {
-        refferal = refferal_;
-        emit ReferralUpdated(refferal_);
+    function updateReferral(address referral_) external onlyOwner {
+        referral = referral_;
+        emit ReferralUpdated(referral_);
     }
 
     function enableVaults(address[] calldata vaults_) external onlyOwner {

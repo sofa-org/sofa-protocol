@@ -86,7 +86,7 @@ describe("Automator", function () {
   describe("Initialization", function () {
     it("Should initialize with correct parameters", async function () {
       expect(await automator.collateral()).to.equal(collateral.address);
-      expect(await automator.refferal()).to.equal(referral.address);
+      expect(await automator.referral()).to.equal(referral.address);
     });
   });
 
