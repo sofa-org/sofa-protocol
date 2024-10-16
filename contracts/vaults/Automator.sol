@@ -258,6 +258,10 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         }
     }
 
+    function getAmountForMint() public view returns (uint256) {
+        return getPricePerShare() * (totalSupply() - totalPendingRedemptions) / 1e18;
+    }
+
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
         if (from != address(0)) {
             require(balanceOf(from) >= amount + _redemptions[from].pendingRedemption, "Automator: invalid transfer amount");
