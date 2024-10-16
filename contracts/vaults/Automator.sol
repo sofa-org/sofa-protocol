@@ -258,7 +258,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         }
     }
 
-    function getAmountForMint() public view returns (uint256) {
+    function getUnredeemedCollateral() external view returns (uint256) {
         return getPricePerShare() * (totalSupply() - totalPendingRedemptions) / 1e18;
     }
 
