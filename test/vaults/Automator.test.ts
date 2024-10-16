@@ -35,8 +35,6 @@ describe("Automator", function () {
     const strategyA = await StrategyA.deploy();
     const StrategyB = await ethers.getContractFactory("SmartBear");
     const strategyB = await StrategyB.deploy();
-
-
     // Deploy SmartTrendVault contract
     const VaultA = await ethers.getContractFactory("AAVESmartTrendVault");
     vaultA = await upgrades.deployProxy(VaultA, [
@@ -89,7 +87,6 @@ describe("Automator", function () {
       chainId: 1,
       verifyingContract: vaultC.address,
     };
-
     // Automator contract
     const Automator = await ethers.getContractFactory("Automator");
     automator = await upgrades.deployProxy(Automator, [
@@ -97,15 +94,13 @@ describe("Automator", function () {
       referral.address,
       feeCollector.address,
     ]);
-
     await collateral.connect(minter).approve(automator.address, constants.MaxUint256); // approve max
     await collateral.connect(owner).approve(automator.address, constants.MaxUint256);
     await collateral.connect(maker).approve(vaultA.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vaultB.address, constants.MaxUint256); // approve max
     await collateral.connect(maker).approve(vaultC.address, constants.MaxUint256);
   });
-  
-  
+
   describe("Initialization", function () {
     it("Should initialize with correct parameters", async function () {
       expect(await automator.collateral()).to.equal(collateral.address);
@@ -198,7 +193,6 @@ describe("Automator", function () {
       const amount = parseEther("100");
       const amountWd = amount.div(3);
       const amountRm = amount.sub(amountWd);
-
       await automator.connect(minter).deposit(amount);
       await automator.connect(minter).withdraw(amountWd);
       expect(await automator.balanceOf(minter.address)).to.equal(amount);
@@ -217,7 +211,19 @@ describe("Automator", function () {
     it("Should get initial price per share", async function () {
       expect(await automator.getPricePerShare()).to.equal(parseEther("1"));
     });
-    //other cases are in the application cases below
+  });
+
+  describe("getUnredeemedCollateral", function () {
+    it("Should get initial amount of unredeemed collateral", async function () {
+      expect(await automator.getUnredeemedCollateral()).to.equal(0);
+    });
+    it("Should get amount of unredeemed collateral after deposit and withdraw", async function () {
+      const amount = parseEther("100");
+      await automator.connect(minter).deposit(amount);
+      expect(await automator.getUnredeemedCollateral()).to.equal(amount);
+      await automator.connect(minter).withdraw(amount.div(2));
+      expect(await automator.getUnredeemedCollateral()).to.equal(amount.div(2));
+    });
   });
   
   describe("Deposit/Withdraw", function () {
@@ -247,7 +253,32 @@ describe("Automator", function () {
       await expect(automator.connect(minter).withdraw(amount.div(2)))
         .to.emit(automator, "Withdrawn").withArgs(minter.address, amount.div(2));
     });
-    it("Should withdraw revert if transfer + pending > balance", async function () {
+    it("Should transfer done if transfer + pending <= balance", async function () {
+      const amount = parseEther("100");
+      await automator.connect(minter).deposit(amount);
+      await automator.connect(minter).withdraw(amount.div(2));
+      await expect(automator.connect(minter).transfer(owner.address, amount.div(2)))
+        .to.changeTokenBalances(automator, [owner, minter], [amount.div(2), amount.div(2).mul(-1)]);
+    });
+    it("Should transferFrom done if transfer + pending <= balance", async function () {
+      await automator.connect(minter).approve(owner.address, constants.MaxUint256); 
+      const amount = parseEther("100");
+      await automator.connect(minter).deposit(amount);
+      await automator.connect(minter).withdraw(amount.div(2));
+      await expect(automator.connect(owner).transferFrom(minter.address, owner.address, amount.div(2)))
+        .to.changeTokenBalances(automator, [owner, minter], [amount.div(2), amount.div(2).mul(-1)]);
+    });
+    it("Should revert if transferFrom amount + pending > balance", async function () {
+      await automator.connect(minter).approve(owner.address, constants.MaxUint256); 
+      const amount = parseEther("100");
+      await automator.connect(minter).deposit(amount);
+      await automator.connect(minter).withdraw(amount.div(2));
+      await expect(automator.connect(owner).transferFrom(minter.address, owner.address, amount.div(2)))
+        .to.changeTokenBalances(automator, [owner, minter], [amount.div(2), amount.div(2).mul(-1)]);
+      await expect(automator.connect(owner).transferFrom(minter.address, owner.address, 1))
+        .to.be.revertedWith("Automator: invalid transfer amount");  
+    });
+    it("Should revert if transfer + pending > balance", async function () {
       const amount = parseEther("100");
       await automator.connect(minter).deposit(amount);
       await automator.connect(minter).withdraw(amount.div(2));
@@ -323,10 +354,8 @@ describe("Automator", function () {
       expect(await automator.totalPendingRedemptions()).to.equal(0);
       expect(await automator.totalCollateral()).to.equal(0);
     });
-
   });
   
-
   describe("Mint/Burn Products", function () {
     let productMint: any;
     let productMintB: any;
@@ -398,7 +427,6 @@ describe("Automator", function () {
         maker,
         eip721DomainA
       );
-
       productMint = {
         vault: vaultA.address,
         totalCollateral: totalCollateral,
@@ -503,7 +531,6 @@ describe("Automator", function () {
       await expect(automator.connect(minter).claimRedemptions())
         .to.be.revertedWith("Automator: insufficient collateral to redeem");
     });
-
     //burn
     it("should successfully burn products", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
@@ -552,7 +579,6 @@ describe("Automator", function () {
       const left = parseEther("79.979607691404508172");
       await expect(automator.connect(minter).burnProducts([productBurn]))
         .to.changeTokenBalances(collateral, [automator, vaultC, aavePool], [left, 0, left.mul(-1)]);
-      
       //vaultC automator: in:80*1e18 out:79.979593304511722679 
       expect(await automator.totalFee()).to.equal(0);
       expect(await automator.getPricePerShare()).to.equal((left.add(parseEther("20")).div(100)));
@@ -561,9 +587,7 @@ describe("Automator", function () {
     });
     it("should burn products with no loss and no profit", async function () {
       const signaturesSignature = await signSignatures([productMintD], maker);
-      //console.log("before mint time:", await time.latest());
       const tx = await automator.connect(minter).mintProducts([productMintD], signaturesSignature);
-      //console.log("after mint time:", await time.latest());
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultA, receipt);
       const productBurn  = {
@@ -577,18 +601,15 @@ describe("Automator", function () {
       };
       await time.increaseTo(expiry);
       await oracle.settle();
-      //console.log("before burn time:", await time.latest());
       const left = parseEther("90");
       await expect(automator.connect(minter).burnProducts([productBurn]))
         .to.changeTokenBalances(collateral, [automator, vaultA, aavePool], [left, 0, left.mul(-1)]);
-      
       //in 90; out 90
       expect(await automator.totalFee()).to.equal(0);
       expect(await automator.getPricePerShare()).to.equal(parseEther("1"));
       expect(await automator.totalCollateral()).to.equal(parseEther("100"));
       expect(await automator.totalSupply()).to.equal(parseEther("100"));
     });
-
     it("should successfully mint/burn two products", async function () {
       await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
       const signaturesSignature = await signSignatures([productMint, productMintB], maker);
@@ -626,7 +647,6 @@ describe("Automator", function () {
         .to.changeTokenBalances(collateral, [automator, feeCollector], [parseEther("0.194").mul(-1), parseEther("0.194")]);
       expect(await automator.totalFee()).to.equal(0);
     });
-
     it("should claim pending redemptions", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       const tx = await automator.connect(minter).mintProducts([productMint], signaturesSignature);
@@ -643,10 +663,8 @@ describe("Automator", function () {
       };
       await time.increaseTo(expiry);
       await oracle.settle();
-
       await expect(automator.connect(minter).withdraw(parseEther("100"))).to.changeTokenBalance(collateral, minter, 0);
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
-
       await expect(automator.connect(minter).burnProducts([productBurn]))
         .to.emit(automator, "ProductsBurned");
       await expect(automator.connect(minter).claimRedemptions())
@@ -681,7 +699,7 @@ describe("Automator", function () {
       await automator.connect(minter).withdraw(amount);
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]);
       const amountWd = parseEther("209.602999999999999999");
-      console.log(await automator.getPricePerShare());
+      //console.log(await automator.getPricePerShare());
       await expect(automator.connect(minter).claimRedemptions())
         .to.changeTokenBalances(collateral, [minter, automator], [amountWd, amountWd.mul(-1)]);
       expect(await automator.getPricePerShare()).to.equal(parseEther("1"));
@@ -702,30 +720,17 @@ describe("Automator", function () {
           isMaker: 0
         }]
       };
-      
       await time.increaseTo(expiry);
       await oracle.settle();
-      //console.log("before burn time:", await time.latest());
       const left = parseEther("79.979607691404508172");
       await expect(automator.connect(minter).burnProducts([productBurn]))
         .to.changeTokenBalances(collateral, [automator, vaultC, aavePool], [left, 0, left.mul(-1)]);
-      
-      //vaultC automator: in:80*1e18 out:79.979593304511722679 
-      //expect(await automator.totalFee()).to.equal(0);
-      //expect(await automator.getPricePerShare()).to.equal((left.add(parseEther("20")).div(100)));
-      //expect(await automator.totalCollateral()).to.equal(left.add(parseEther("20")));
-      //expect(await automator.totalSupply()).to.equal(parseEther("100"));
       const amount = parseEther("99.979607691404508100");
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]);
       await expect(automator.connect(minter).claimRedemptions())
         .to.changeTokenBalances(collateral, [minter, automator], [amount, amount.mul(-1)]);
-
     });
-
-
-
   });
-  
 })
 
 function getCatRP(vault: any, receipt: any) {
