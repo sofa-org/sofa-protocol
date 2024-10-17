@@ -259,7 +259,11 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     }
 
     function getUnredeemedCollateral() external view returns (uint256) {
-        return getPricePerShare() * (totalSupply() - totalPendingRedemptions) / 1e18;
+        if (collateral.balanceOf(address(this)) > totalPendingRedemptions * getPricePerShare() / 1e18) {
+            return collateral.balanceOf(address(this)) - totalPendingRedemptions * getPricePerShare() / 1e18;
+        } else {
+            return 0;
+        }
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {

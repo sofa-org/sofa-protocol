@@ -485,7 +485,13 @@ describe("Automator", function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       await expect(automator.connect(minter).mintProducts([productMint], signaturesSignature))
         .to.changeTokenBalances(collateral, [automator, vaultA, aavePool], [parseEther("90").mul(-1), 0, parseEther("100")]);
-        //.to.emit(automator, "ProductsMinted");
+    });
+    it("should get unredeemed collateral after mint products", async function () {
+      expect(await automator.getUnredeemedCollateral()).to.equal(parseEther("100"));
+      const signaturesSignature = await signSignatures([productMint], maker);
+      await expect(automator.connect(minter).mintProducts([productMint], signaturesSignature))
+        .to.changeTokenBalances(collateral, [automator, vaultA, aavePool], [parseEther("90").mul(-1), 0, parseEther("100")]);
+      expect(await automator.getUnredeemedCollateral()).to.equal(parseEther("10"));
     });
     it("should mint emit log", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
