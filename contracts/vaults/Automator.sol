@@ -156,7 +156,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
             );
             bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices));
             _positions[id] = _positions[id] + products[i].totalCollateral - products[i].mintParams.makerCollateral;
-            signatures = signatures ^ keccak256(products[i].mintParams.makerSignature);
+            signatures = signatures ^ keccak256(abi.encodePacked(products[i].mintParams.maker, products[i].mintParams.makerSignature));
         }
 
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);

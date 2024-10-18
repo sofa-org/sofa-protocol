@@ -821,7 +821,12 @@ async function signMintParamsWithCollateralAtRisk(
 
 async function signSignatures(products, signer) {
   const signatures = products.reduce((acc, product) => {
-    const signature = ethers.utils.keccak256(product.mintParams.makerSignature);
+    const signature = ethers.utils.keccak256(
+      ethers.utils.solidityPack(
+        ['address', 'bytes'],
+        [product.mintParams.maker, product.mintParams.makerSignature]
+      )
+    );
     return ethers.utils.hexlify(ethers.BigNumber.from(acc).xor(ethers.BigNumber.from(signature)))
   }, ethers.constants.HashZero);
 
