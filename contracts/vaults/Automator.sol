@@ -115,7 +115,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     }
 
     function withdraw(uint256 shares) external {
-        require(_redemptions[_msgSender()].pendingRedemption == 0, "Automator: pending redemption");
+        require(_redemptions[_msgSender()].pendingRedemption == 0 || block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days + 3 days, "Automator: pending redemption");
         require(balanceOf(_msgSender()) >= shares, "Automator: insufficient shares");
         _redemptions[_msgSender()].pendingRedemption = shares;
         _redemptions[_msgSender()].redemptionRequestTimestamp = block.timestamp;
@@ -126,7 +126,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function claimRedemptions() external {
         require(_redemptions[_msgSender()].pendingRedemption > 0, "Automator: no pending redemption");
-        require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days, "Automator: early redemption");
+        require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days + 3 days, "Automator: invalid redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
         uint256 amount = pendingRedemption * getPricePerShare() / 1e18;

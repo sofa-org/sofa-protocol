@@ -294,6 +294,14 @@ describe("Automator", function () {
       await expect(automator.connect(minter).withdraw(amount.div(2)))
         .to.be.revertedWith("Automator: pending redemption");
     });
+    it("Should withdraw when 10 days after withdraw ", async function () {
+      const amount = parseEther("100");
+      await automator.connect(minter).deposit(amount);
+      await automator.connect(minter).withdraw(amount.div(2));
+      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 10]); // Fast forward 7 days
+      await expect(automator.connect(minter).withdraw(amount.div(2)))
+        .to.emit(automator, "Withdrawn").withArgs(minter.address, amount.div(2));
+    });
     it("Should withdraw revert if shares > balance", async function () {
       const amount = parseEther("100");
       await automator.connect(minter).deposit(amount);
@@ -313,6 +321,22 @@ describe("Automator", function () {
       expect(await automator.balanceOf(minter.address)).to.equal(amountRm);
       expect(await automator.totalPendingRedemptions()).to.equal(0);
       expect(await automator.totalCollateral()).to.equal(amountRm);
+    });
+    it("Should not claim when 10 days after withdraw", async function () {
+      const amount = parseEther("100");
+      const amountWd = amount.div(3);
+      const amountRm = amount.sub(amountWd);
+      await automator.connect(minter).deposit(amount);
+      await automator.connect(minter).withdraw(amountWd);
+      expect(await automator.balanceOf(minter.address)).to.equal(amount);
+      const ts = await time.latest();
+      expect(await automator.connect(minter).getRedemption()).to.deep.equal([amountWd, ethers.BigNumber.from(ts)]);
+      expect(await automator.getRedemption()).to.deep.equal([ethers.BigNumber.from(0), ethers.BigNumber.from(0)]);
+      await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 10]); // Fast forward 7 days
+      await expect(automator.connect(minter).claimRedemptions())
+        .to.be.revertedWith("Automator: invalid redemption");
+      //after claim
+      expect(await automator.connect(minter).getRedemption()).to.deep.equal([amountWd, ethers.BigNumber.from(ts)]);
     });
     it("Should claim emit log", async function () {
       const amount = parseEther("100");
@@ -334,7 +358,7 @@ describe("Automator", function () {
       await automator.connect(minter).withdraw(ethers.utils.parseEther("50"));
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 6]); // Fast forward 7 days
       await expect(automator.connect(minter).claimRedemptions())
-        .to.be.revertedWith("Automator: early redemption");
+        .to.be.revertedWith("Automator: invalid redemption");
     });
     it("Should deposit, withdraw and claim by many people", async function () {
       const amount = parseEther("100");
