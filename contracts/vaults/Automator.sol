@@ -117,9 +117,13 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     function withdraw(uint256 shares) external {
         require(_redemptions[_msgSender()].pendingRedemption == 0 || block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days + 3 days, "Automator: pending redemption");
         require(balanceOf(_msgSender()) >= shares, "Automator: insufficient shares");
+        if (_redemptions[_msgSender()].pendingRedemption > 0) {
+            totalPendingRedemptions = totalPendingRedemptions + shares - _redemptions[_msgSender()].pendingRedemption;
+        } else {
+            totalPendingRedemptions = totalPendingRedemptions + shares;
+        }
         _redemptions[_msgSender()].pendingRedemption = shares;
         _redemptions[_msgSender()].redemptionRequestTimestamp = block.timestamp;
-        totalPendingRedemptions += shares;
 
         emit Withdrawn(_msgSender(), shares);
     }
