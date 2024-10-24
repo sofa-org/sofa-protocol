@@ -945,6 +945,8 @@ contract RBTC is IERC20, Ownable {
     constructor() {
     }
 
+    receive() external payable {}
+
     function name() external pure returns (string memory) {
         return "Reliable BTC";
     }
@@ -980,6 +982,8 @@ contract RBTC is IERC20, Ownable {
         require(success, "WITHDRAW_FAILED");
 
         emit Withdrawn(msg.sender, amount, sharesAmount);
+        emit Transfer(address(this), msg.sender, amount);
+        emit TransferShares(msg.sender, address(0), sharesAmount);
     }
 
     function rebaseCollateral(uint256 newTotalCollateral) external onlyOwner {
