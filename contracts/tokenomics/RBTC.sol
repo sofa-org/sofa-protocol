@@ -981,9 +981,9 @@ contract RBTC is IERC20, Ownable {
         (bool success, ) = msg.sender.call{value: amount, gas: 10_000}("");
         require(success, "WITHDRAW_FAILED");
 
-        emit Withdrawn(msg.sender, amount, sharesAmount);
         emit Transfer(address(this), msg.sender, amount);
         emit TransferShares(msg.sender, address(0), sharesAmount);
+        emit Withdrawn(msg.sender, amount, sharesAmount);
     }
 
     function rebaseCollateral(uint256 newTotalCollateral) external onlyOwner {
@@ -1150,14 +1150,14 @@ contract RBTC is IERC20, Ownable {
 
     function getSharesByPooledBTC(uint256 btcAmount) public view returns (uint256) {
         return btcAmount
-            .mul(totalSupply())
-            .div(_totalCollateral);
+            .mul(_getTotalShares())
+            .div(_getTotalPooledBTC());
     }
 
     function getPooledBTCByShares(uint256 sharesAmount) public view returns (uint256) {
         return sharesAmount
-            .mul(_totalCollateral)
-            .div(totalSupply());
+            .mul(_getTotalPooledBTC())
+            .div(_getTotalShares());
     }
 
     /**

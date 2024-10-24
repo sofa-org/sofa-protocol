@@ -980,9 +980,9 @@ contract RBTC20 is IERC20, Ownable {
         _burnShares(msg.sender, sharesAmount);
         collateral.safeTransfer(msg.sender, amount);
 
-        emit Withdrawn(msg.sender, amount, sharesAmount);
         emit Transfer(address(this), msg.sender, amount);
         emit TransferShares(msg.sender, address(0), sharesAmount);
+        emit Withdrawn(msg.sender, amount, sharesAmount);
     }
 
     function rebaseCollateral(uint256 newTotalCollateral) external onlyOwner {
