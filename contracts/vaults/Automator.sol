@@ -166,7 +166,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(makers[signer], "Automator: invalid maker");
-        require(collateral.balanceOf(address(this)) >= totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+        require(collateral.balanceOf(address(this)) >= totalFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
 
         emit ProductsMinted(products);
     }
