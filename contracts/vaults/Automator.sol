@@ -11,6 +11,7 @@ import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/utils/ERC1155HolderUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "../interfaces/IFeeCollector.sol";
 
 struct Product {
@@ -40,7 +41,7 @@ interface IVault {
     function burn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external;
 }
 
-contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable, ERC20Upgradeable {
+contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable, ERC20Upgradeable, ReentrancyGuardUpgradeable {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
@@ -99,6 +100,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
             string(abi.encodePacked("Automator ", IERC20Metadata(collateral_).name())),
             string(abi.encodePacked("at", IERC20Metadata(collateral_).symbol()))
         );
+        __ReentrancyGuard_init();
     }
 
     function deposit(uint256 amount) external {
@@ -173,7 +175,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     function burnProducts(
         ProductBurn[] calldata products
-    ) external {
+    ) external nonReentrant {
         uint256 totalEarned;
         uint256 totalPositions;
         uint256 fee;
