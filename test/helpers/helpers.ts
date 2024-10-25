@@ -109,6 +109,8 @@ async function deployFixture() {
     UNI_ROUTERV2_ADDR,
     UNI_ROUTERV3_ADDR
   );
+  const FeeCollectorSimple = await ethers.getContractFactory("FeeCollectorSimple");
+  const feeCollectorSimple = await FeeCollectorSimple.deploy(0, 0);
   // mock atoken contract
   const AToken = await ethers.getContractFactory("MockATokenMintable");
   const atoken = await AToken.deploy(
@@ -133,7 +135,7 @@ async function deployFixture() {
   const stRCH = await StRCH.deploy(rch.address, airdrop.address, parseEther("0.03"));
 
   return {
-    permit2, collateral, hlAggregator, spotAggregator, feeCollector,
+    permit2, collateral, hlAggregator, spotAggregator, feeCollector, feeCollectorSimple,
     hlOracle, spotOracle, owner, minter, maker, referral, weth, steth,
     rch, airdrop, stRCH, atoken, aavePool
   };

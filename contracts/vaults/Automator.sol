@@ -37,7 +37,7 @@ interface IVault {
         address referral
     ) external;
 
-    function burnBatch(Product[] calldata products) external;
+    function burn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external;
 }
 
 contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC1155HolderUpgradeable, ERC20Upgradeable {
@@ -77,7 +77,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     event Withdrawn(address indexed account, uint256 shares);
     event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
     event ProductsMinted(ProductMint[] products);
-    event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, uint256 fee);
+    event ProductsBurned(ProductBurn[] products, uint256 totalCollateral, uint256 fee);
     event ReferralUpdated(address referral);
     event VaultsEnabled(address[] vaults);
     event VaultsDisabled(address[] vaults);
@@ -158,7 +158,8 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
                 products[i].mintParams,
                 referral
             );
-            bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices));
+            uint256 collateralAtRiskPercentage = products[i].mintParams.collateralAtRisk * 1e18 / products[i].totalCollateral;
+            bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices, collateralAtRiskPercentage));
             _positions[id] = _positions[id] + products[i].totalCollateral - products[i].mintParams.makerCollateral;
             signatures = signatures ^ keccak256(abi.encodePacked(products[i].mintParams.maker, products[i].mintParams.makerSignature));
         }
@@ -177,17 +178,24 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         uint256 totalPositions;
         uint256 fee;
         for (uint256 i = 0; i < products.length; i++) {
-            uint256 balanceBefore = collateral.balanceOf(address(this));
-            IVault(products[i].vault).burnBatch(products[i].products);
-            uint256 balanceAfter = collateral.balanceOf(address(this));
-            uint256 earned = balanceAfter - balanceBefore;
-            totalEarned += earned;
-            bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[0].expiry, products[i].products[0].anchorPrices));
-            totalPositions += _positions[id];
-            if (earned > _positions[id]) {
-                fee += (earned - _positions[id]) * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+            for (uint256 j = 0; j < products[i].products.length; j++) {
+                uint256 balanceBefore = collateral.balanceOf(address(this));
+                IVault(products[i].vault).burn(
+                    products[i].products[j].expiry,
+                    products[i].products[j].anchorPrices,
+                    products[i].products[j].collateralAtRiskPercentage,
+                    products[i].products[j].isMaker
+                );
+                uint256 balanceAfter = collateral.balanceOf(address(this));
+                uint256 earned = balanceAfter - balanceBefore;
+                totalEarned += earned;
+                bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[j].expiry, products[i].products[j].anchorPrices, products[i].products[j].collateralAtRiskPercentage));
+                totalPositions += _positions[id];
+                if (earned > _positions[id]) {
+                    fee += (earned - _positions[id]) * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+                }
+                delete _positions[id];
             }
-            delete _positions[id];
         }
         if (fee > 0) {
             totalFee += fee;
