@@ -103,7 +103,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         __ReentrancyGuard_init();
     }
 
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external nonReentrant {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
         uint256 shares;
         if (totalSupply() == 0) {
@@ -116,7 +116,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         emit Deposited(_msgSender(), amount, shares);
     }
 
-    function withdraw(uint256 shares) external {
+    function withdraw(uint256 shares) external nonReentrant {
         require(_redemptions[_msgSender()].pendingRedemption == 0 || block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days + 3 days, "Automator: pending redemption");
         require(balanceOf(_msgSender()) >= shares, "Automator: insufficient shares");
         if (_redemptions[_msgSender()].pendingRedemption > 0) {
@@ -130,7 +130,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         emit Withdrawn(_msgSender(), shares);
     }
 
-    function claimRedemptions() external {
+    function claimRedemptions() external nonReentrant {
         require(_redemptions[_msgSender()].pendingRedemption > 0, "Automator: no pending redemption");
         require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days + 3 days, "Automator: invalid redemption");
 
@@ -151,7 +151,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
     function mintProducts(
         ProductMint[] calldata products,
         bytes calldata signature
-    ) external {
+    ) external nonReentrant {
         bytes32 signatures;
         for (uint256 i = 0; i < products.length; i++) {
             require(vaults[products[i].vault], "Automator: invalid vault");
