@@ -18,7 +18,6 @@ struct Product {
     uint256 expiry;
     uint256[2] anchorPrices;
     uint256 collateralAtRiskPercentage;
-    uint256 isMaker;
 }
 
 struct MintParams {
@@ -186,7 +185,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
                     products[i].products[j].expiry,
                     products[i].products[j].anchorPrices,
                     products[i].products[j].collateralAtRiskPercentage,
-                    products[i].products[j].isMaker
+                    0
                 );
                 uint256 balanceAfter = collateral.balanceOf(address(this));
                 uint256 earned = balanceAfter - balanceBefore;

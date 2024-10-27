@@ -574,7 +574,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPrices,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
@@ -601,7 +600,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPricesC,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
@@ -627,7 +625,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPricesC,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
@@ -653,7 +650,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPrices,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       const productBurnB  = {
@@ -662,7 +658,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPricesB,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
@@ -689,7 +684,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPrices,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
@@ -712,7 +706,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPrices,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
@@ -748,7 +741,6 @@ describe("Automator", function () {
           expiry: expiry,
           anchorPrices: anchorPricesC,
           collateralAtRiskPercentage: collateralAtRiskPercentage,
-          isMaker: 0
         }]
       };
       await time.increaseTo(expiry);
