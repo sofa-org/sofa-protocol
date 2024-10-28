@@ -288,12 +288,13 @@ describe("Automator", function () {
       await expect(automator.connect(minter).transfer(owner.address, amount.div(2)))
         .to.be.revertedWith("Automator: invalid transfer amount");
     });
-    it("Should withdraw revert if pendingRedemption != 0", async function () {
+    it("Should withdraw if pendingRedemption != 0", async function () {
       const amount = parseEther("100");
       await automator.connect(minter).deposit(amount);
       await automator.connect(minter).withdraw(amount.div(2));
-      await expect(automator.connect(minter).withdraw(amount.div(2)))
-        .to.be.revertedWith("Automator: pending redemption");
+      await ethers.provider.send("evm_setNextBlockTimestamp", [1723507680]);
+      await automator.connect(minter).withdraw(amount);
+      expect(await automator.connect(minter).getRedemption()).to.deep.equal([amount, ethers.BigNumber.from(1723507680)]);
     });
     it("Should withdraw when 10 days after withdraw ", async function () {
       const amount = parseEther("100");
