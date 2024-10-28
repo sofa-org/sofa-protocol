@@ -46,6 +46,7 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
 
     address public referral;
     IERC20 public collateral;
+    uint256 public constant MINIMUM_SHARES = 10**3;
 
     uint256 public totalFee;
     address public feeCollector;
@@ -106,7 +107,8 @@ contract Automator is Initializable, ContextUpgradeable, OwnableUpgradeable, ERC
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
         uint256 shares;
         if (totalSupply() == 0) {
-            shares = amount;
+            shares = amount - MINIMUM_SHARES;
+            _mint(address(0x000000000000000000000000000000000000dEaD), MINIMUM_SHARES);
         } else {
             shares = amount * totalSupply() / totalCollateral;
         }
