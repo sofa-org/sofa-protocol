@@ -109,6 +109,8 @@ async function deployFixture() {
     UNI_ROUTERV2_ADDR,
     UNI_ROUTERV3_ADDR
   );
+  const FeeCollectorSimple = await ethers.getContractFactory("FeeCollectorSimple");
+  const feeCollectorSimple = await FeeCollectorSimple.deploy(0, 0);
   // mock atoken contract
   const AToken = await ethers.getContractFactory("MockATokenMintable");
   const atoken = await AToken.deploy(
@@ -124,16 +126,18 @@ async function deployFixture() {
     collateral.address,
     atoken.address
   );
-
+  const RCH = await ethers.getContractFactory("RCH");
+  const rch = await RCH.deploy(0);
   const Airdrop = await ethers.getContractFactory("MerkleAirdrop");
-  const airdrop = await Airdrop.deploy(collateral.address);
+  const airdrop = await Airdrop.deploy(rch.address);
+  await rch.transferOwnership(airdrop.address);
   const StRCH = await ethers.getContractFactory("StRCH");
-  const stRCH = await StRCH.deploy(collateral.address, airdrop.address, parseEther("0.03"));
+  const stRCH = await StRCH.deploy(rch.address, airdrop.address, parseEther("0.03"));
 
   return {
-    permit2, collateral, hlAggregator, spotAggregator, feeCollector,
+    permit2, collateral, hlAggregator, spotAggregator, feeCollector, feeCollectorSimple,
     hlOracle, spotOracle, owner, minter, maker, referral, weth, steth,
-    airdrop, stRCH, atoken, aavePool
+    rch, airdrop, stRCH, atoken, aavePool
   };
 }
 
@@ -763,6 +767,75 @@ async function leverageMint(
   return { vault, collateral, maker, minter, collateralAtRiskPercentage };
 }
 
+function leafComp(address: any, amount: any) {
+  const encoded = ethers.utils.solidityPack(
+    ["address", "uint256"],
+    [address, amount]
+  );
+  return ethers.utils.keccak256(encoded);
+}
+
+function nodeComp(hash1: any, hash2: any) {
+  const [a, b] = hash1 < hash2 ? [hash1, hash2] : [hash2, hash1];
+  const encoded = ethers.utils.solidityPack(
+    ["bytes32", "bytes32"],
+    [a, b]
+  );
+  return ethers.utils.keccak256(encoded);
+}
+
+async function signMintParamsWithCollateralAtRisk(
+  totalCollateral: string,
+  expiry: number,
+  anchorPrices: Array<string>,
+  collateralAtRisk: string,
+  makerCollateral: string,
+  deadline: number,
+  vault: any,
+  minter: any,
+  maker: any,
+  eip721Domain: any
+) {
+  const makerSignatureTypes = { Mint: [
+    { name: 'minter', type: 'address' },
+    { name: 'totalCollateral', type: 'uint256' },
+    { name: 'expiry', type: 'uint256' },
+    { name: 'anchorPrices', type: 'uint256[2]' },
+    { name: 'collateralAtRisk', type: 'uint256' },
+    { name: 'makerCollateral', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+    { name: 'vault', type: 'address' },
+  ] };
+  const makerSignatureValues = {
+    minter: minter.address,
+    totalCollateral: totalCollateral,
+    expiry: expiry,
+    anchorPrices: anchorPrices,
+    collateralAtRisk: collateralAtRisk,
+    makerCollateral: makerCollateral,
+    deadline: deadline,
+    vault: vault.address,
+  };
+  const makerSignature = await maker._signTypedData(eip721Domain, makerSignatureTypes, makerSignatureValues);
+
+  return makerSignature;
+}
+
+async function signSignatures(products, signer) {
+  const signatures = products.reduce((acc, product) => {
+    const signature = ethers.utils.keccak256(
+      ethers.utils.solidityPack(
+        ['address', 'bytes'],
+        [product.mintParams.maker, product.mintParams.makerSignature]
+      )
+    );
+    return ethers.utils.hexlify(ethers.BigNumber.from(acc).xor(ethers.BigNumber.from(signature)))
+  }, ethers.constants.HashZero);
+
+  const signature = await signer.signMessage(ethers.utils.arrayify(signatures));
+  return signature;
+}
+
 module.exports = {
   PERMIT2_ADDRESS,
   expect,
@@ -780,5 +853,6 @@ module.exports = {
   ethMintWithCollateralAtRisk,
   leverageMint,
   parseEther,
-  keccak256, solidityKeccak256, solidityPack, toUtf8Bytes
+  keccak256, solidityKeccak256, solidityPack, toUtf8Bytes,
+  leafComp, nodeComp, signMintParamsWithCollateralAtRisk, signSignatures
 };
