@@ -1,0 +1,311 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.10;
+
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
+import "../utils/SignatureBitMap.sol";
+
+contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
+    using SafeERC20 for IERC20Metadata;
+    using SignatureCheckerUpgradeable for address;
+
+    struct Product {
+        uint256 expiry;
+        uint256 anchorPrice;
+    }
+    struct MintParams {
+        uint256 expiry;
+        uint256 anchorPrice;
+        uint256 makerCollateral;
+        uint256 deadline;
+        address maker;
+        bytes makerSignature;
+    }
+
+    bytes32 public DOMAIN_SEPARATOR;
+    uint256 public constant PRICE_DECIMALS = 1e8;
+    // bytes32 public constant EIP712DOMAIN_TYPEHASH = keccak256(
+    //     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+    // );
+    bytes32 public constant EIP712DOMAIN_TYPEHASH = 0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
+    // bytes32 public constant MINT_TYPEHASH = keccak256(
+    //     "Mint(address minter,uint256 totalCollateral,uint256 expiry,uint256 anchorPrice,uint256 makerCollateral,uint256 deadline,address vault)"
+    // );
+    bytes32 public constant MINT_TYPEHASH = 0xadc8ab1b9b31223fe0b8ae794dc96fe3ad50967c62e34e24108ef68cfa512ec2;
+
+    string public name;
+    string public symbol;
+
+    IERC20Metadata public collateral;
+    IERC20Metadata public quoteAsset;
+
+    uint256 public totalFee;
+    mapping(uint256 => uint256) public quotePositions;
+    mapping(uint256 => uint256) public totalPositions;
+
+    // Events
+    event Minted(address minter, address maker, address referral, uint256 totalCollateral, uint256 expiry, uint256 anchorPrice, uint256 makerCollateral);
+    event Quoted(address operator, uint256 productId, uint256 amount, uint256 quoteAmount);
+    event Burned(address operator, uint256 productId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff);
+    event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs);
+
+    receive() external payable {}
+
+    function initialize(
+        string memory name_,
+        string memory symbol_,
+        address collateral_,
+        address quoteAsset_
+    ) initializer external {
+        name = name_;
+        symbol = symbol_;
+
+        collateral = IERC20Metadata(collateral_);
+        quoteAsset = IERC20Metadata(quoteAsset_);
+
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                EIP712DOMAIN_TYPEHASH,
+                keccak256("Vault"),
+                keccak256("1.0"),
+                block.chainid,
+                address(this)
+            )
+        );
+
+        __Context_init();
+        __ERC1155_init("");
+        __ReentrancyGuard_init();
+    }
+
+    function mint(
+        uint256 totalCollateral,
+        MintParams calldata params,
+        address referral
+    ) external {
+        // transfer collateral
+        uint256 depositAmount = totalCollateral - params.makerCollateral;
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
+        _mint(totalCollateral, params, referral);
+    }
+
+    function _mint(uint256 totalCollateral, MintParams memory params, address referral) internal {
+        require(block.timestamp < params.deadline, "Vault: deadline");
+        require(block.timestamp < params.expiry, "Vault: expired");
+        require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
+        require(referral != _msgSender(), "Vault: invalid referral");
+
+        {
+        // verify maker's signature
+        bytes32 digest =
+            keccak256(abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(abi.encode(MINT_TYPEHASH,
+                                     _msgSender(),
+                                     totalCollateral,
+                                     params.expiry,
+                                     params.anchorPrice,
+                                     params.makerCollateral,
+                                     params.deadline,
+                                     address(this)))
+        ));
+        require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
+        consumeSignature(params.makerSignature);
+
+        // transfer makerCollateral
+        collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+        }
+
+
+        // mint product
+        uint256 productId = getProductId(params.expiry, params.anchorPrice, uint256(0));
+        uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, uint256(1));
+        _mint(_msgSender(), productId, totalCollateral, "");
+        _mint(params.maker, makerProductId, totalCollateral, "");
+        totalPositions[productId] += totalCollateral;
+
+        emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral);
+    }
+
+    function mintBatch(
+        uint256[] calldata totalCollaterals,
+        MintParams[] calldata paramsArray,
+        address referral
+    ) external {
+        require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
+        // transfer collateral
+        uint256 depositAmount;
+        for (uint256 i = 0; i < paramsArray.length; i++) {
+            depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
+        }
+        collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
+        _mintBatch(totalCollaterals, paramsArray, referral);
+    }
+
+    function _mintBatch(uint256[] memory totalCollaterals, MintParams[] memory paramsArray, address referral) internal {
+        require(referral != _msgSender(), "Vault: invalid referral");
+        uint256[] memory productIds = new uint256[](paramsArray.length);
+        for (uint256 i = 0; i < paramsArray.length; i++) {
+            uint256 totalCollateral = totalCollaterals[i];
+            MintParams memory params = paramsArray[i];
+            require(block.timestamp < params.deadline, "Vault: deadline");
+            require(block.timestamp < params.expiry, "Vault: expired");
+            require(!isSignatureConsumed(params.makerSignature), "Vault: signature consumed");
+
+            {
+            // verify maker's signature
+            bytes32 digest =
+                keccak256(abi.encodePacked(
+                                           "\x19\x01",
+                                           DOMAIN_SEPARATOR,
+                                           keccak256(abi.encode(MINT_TYPEHASH,
+                                                                _msgSender(),
+                                                                totalCollateral,
+                                                                params.expiry,
+                                                                params.anchorPrice,
+                                                                params.makerCollateral,
+                                                                params.deadline,
+                                                                address(this)))
+                          ));
+            require(params.maker.isValidSignatureNow(digest, params.makerSignature), "Vault: invalid maker signature");
+            consumeSignature(params.makerSignature);
+
+            // transfer makercollateral
+            collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+            }
+
+            totalCollaterals[i] = totalCollateral;
+
+            // mint product
+            productIds[i] = getProductId(params.expiry, params.anchorPrice, uint256(0));
+            uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, uint256(1));
+            _mint(params.maker, makerProductId, totalCollateral, "");
+            totalPositions[productIds[i]] += totalCollateral;
+
+            emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral);
+        }
+        _mintBatch(_msgSender(), productIds, totalCollaterals, "");
+    }
+
+    function quote(uint256 amount, Product calldata product) external {
+        require(block.timestamp < product.expiry + 2 hours, "Vault: expired");
+        uint256 productId = getProductId(product.expiry, product.anchorPrice, 1);
+        require(balanceOf(_msgSender(), productId) >= amount, "Vault: insufficient balance");
+        uint256 quoteAmount = amount * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        quoteAsset.safeTransferFrom(_msgSender(), address(this), quoteAmount);
+        collateral.safeTransfer(_msgSender(), amount);
+        _burn(_msgSender(), productId, amount);
+        quotePositions[productId] += amount;
+
+        emit Quoted(_msgSender(), productId, amount, quoteAmount);
+    }
+
+    function quoteBatch(uint256[] calldata amounts, Product[] calldata products) external nonReentrant {
+        require(amounts.length == products.length, "Vault: invalid length");
+        uint256 totalQuoteAmount;
+        uint256 totalCollateralAmount;
+        uint256[] memory productIds = new uint256[](products.length);
+        for (uint256 i = 0; i < products.length; i++) {
+            Product calldata product = products[i];
+            require(block.timestamp < product.expiry + 2 hours, "Vault: expired");
+            uint256 productId = getProductId(product.expiry, product.anchorPrice, 1);
+            require(balanceOf(_msgSender(), productId) >= amounts[i], "Vault: insufficient balance");
+            totalCollateralAmount += amounts[i];
+            uint256 quoteAmount = amounts[i] * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+            totalQuoteAmount += quoteAmount;
+            quotePositions[productId] += amounts[i];
+            productIds[i] = productId;
+
+            emit Quoted(_msgSender(), productId, amounts[i], quoteAmount);
+        }
+        _burnBatch(_msgSender(), productIds, amounts);
+        quoteAsset.safeTransferFrom(_msgSender(), address(this), totalQuoteAmount);
+        collateral.safeTransfer(_msgSender(), totalCollateralAmount);
+    }
+
+    function burn(uint256 expiry, uint256 anchorPrice) external {
+        (uint256 collateralPayoff, uint256 quoteAssetPayoff) = _burn(expiry, anchorPrice);
+        if (collateralPayoff > 0) {
+            collateral.safeTransfer(_msgSender(), collateralPayoff);
+        }
+        if (quoteAssetPayoff > 0) {
+            quoteAsset.safeTransfer(_msgSender(), quoteAssetPayoff);
+        }
+    }
+
+    function _burn(uint256 expiry, uint256 anchorPrice) internal nonReentrant returns (uint256 collateralPayoff, uint256 quoteAssetPayoff) {
+        require(block.timestamp >= expiry + 2 hours, "Vault: not expired");
+        uint256 productId = getProductId(expiry, anchorPrice, 0);
+        uint256 amount = balanceOf(_msgSender(), productId);
+        require(amount > 0, "Vault: zero amount");
+
+        uint256 totalPosition = totalPositions[productId];
+        uint256 makerPosition = quotePositions[getProductId(expiry, anchorPrice, 1)];
+        collateralPayoff = amount - amount * makerPosition / totalPosition;
+        quoteAssetPayoff = (amount - collateralPayoff) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+
+        // burn product
+        _burn(_msgSender(), productId, amount);
+
+        emit Burned(_msgSender(), productId, amount, collateralPayoff, quoteAssetPayoff);
+    }
+
+    function burnBatch(Product[] calldata products) external {
+        (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff) = _burnBatch(products);
+
+        // check self balance of collateral and transfer payoff
+        if (totalCollateralPayoff > 0) {
+            collateral.safeTransfer(_msgSender(), totalCollateralPayoff);
+        }
+        if (totalQuoteAssetPayoff > 0) {
+            quoteAsset.safeTransfer(_msgSender(), totalQuoteAssetPayoff);
+        }
+    }
+
+    function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff) {
+        uint256[] memory productIds = new uint256[](products.length);
+        uint256[] memory amounts = new uint256[](products.length);
+        uint256[] memory collateralPayoffs = new uint256[](products.length);
+        uint256[] memory quoteAssetPayoffs = new uint256[](products.length);
+        for (uint256 i = 0; i < products.length; i++) {
+            Product memory product = products[i];
+            uint256 productId = getProductId(product.expiry, product.anchorPrice, 0);
+            uint256 amount = balanceOf(_msgSender(), productId);
+            require(amount > 0, "Vault: zero amount");
+            require(block.timestamp >= product.expiry + 2 hours, "Vault: not expired");
+            uint256 totalPosition = totalPositions[productId];
+            uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
+            uint256 collateralPayoff = amount - amount * makerPosition / totalPosition;
+            uint256 quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+
+            productIds[i] = productId;
+            amounts[i] = amount;
+            collateralPayoffs[i] = collateralPayoff;
+            quoteAssetPayoffs[i] = quoteAssetPayoff;
+            totalCollateralPayoff += collateralPayoff;
+            totalQuoteAssetPayoff += quoteAssetPayoff;
+        }
+        // burn product
+        _burnBatch(_msgSender(), productIds, amounts);
+        emit BatchBurned(_msgSender(), productIds, amounts, collateralPayoffs, quoteAssetPayoffs);
+    }
+
+    // get product id by parameters
+    function getProductId(uint256 expiry, uint256 anchorPrice, uint256 isMaker) public pure returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(expiry, anchorPrice, isMaker)));
+    }
+
+    // get decimals
+    function decimals() external view returns (uint8) {
+        return collateral.decimals();
+    }
+
+    uint256[50] private __gap;
+}
