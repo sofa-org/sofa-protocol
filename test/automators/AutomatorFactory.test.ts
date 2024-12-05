@@ -20,6 +20,7 @@ describe("AutomatorFactory", function () {
     it("should set the referral and fee collector addresses", async function () {
       expect(await automatorFactory.referral()).to.equal(addr1.address);
       expect(await automatorFactory.feeCollector()).to.equal(addr2.address);
+      expect(await automatorFactory.automator()).to.not.equal(ethers.constants.AddressZero);
     });
   });
 
