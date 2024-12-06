@@ -55,7 +55,7 @@ describe("AutomatorFactory", function () {
 
       await expect(automatorFactory.createAutomator(feeRate, collateral))
         .to.emit(automatorFactory, "AutomatorCreated")
-        .withArgs(await automatorFactory.getAutomator(owner.address, collateral), collateral, feeRate);
+        .withArgs(owner.address, collateral, await automatorFactory.getAutomator(owner.address, collateral), feeRate);
     });
 
     it("should return the correct number of automators", async function () {

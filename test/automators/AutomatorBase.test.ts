@@ -103,7 +103,7 @@ describe("Automator", function () {
     await automatorFactory.deployed();
     const tx = await automatorFactory.createAutomator(feeRate, collateral.address);
     const receipt = await tx.wait();
-    const automatorAddr = receipt.events[0].args[0];
+    const automatorAddr = receipt.events[0].args[2];
     const AutomatorBase = await ethers.getContractFactory("AutomatorBase");
     automatorBase = AutomatorBase.attach(automatorAddr).connect(owner);
     await collateral.connect(minter).approve(automatorBase.address, constants.MaxUint256); // approve max
@@ -344,7 +344,7 @@ describe("Automator", function () {
       await automatorBase.connect(minter).deposit(ethers.utils.parseEther("100"));
       const totalCollateral = parseEther("100");
       await ethers.provider.send("evm_setNextBlockTimestamp", [1723507680]);
-      //console.log("before expiry:", await time.latest());
+      //2onsole.log("before expiry:", await time.latest());
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
       //console.log("expiry:", expiry);
       anchorPrices = [parseEther("28000"), parseEther("30000")];
@@ -459,55 +459,55 @@ describe("Automator", function () {
     /*
     it("should successfully mint products with valid signature", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.changeTokenBalances(collateral, [automatorBase, vaultA, aavePool], [parseEther("90").mul(-1), 0, parseEther("100")]);
     });
     it("should get unredeemed collateral after mint products", async function () {
       expect(await automatorBase.getUnredeemedCollateral()).to.equal(parseEther("100"));
       const signaturesSignature = await signSignatures([productMint], maker);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.changeTokenBalances(collateral, [automatorBase, vaultA, aavePool], [parseEther("90").mul(-1), 0, parseEther("100")]);
       expect(await automatorBase.getUnredeemedCollateral()).to.equal(parseEther("10"));
     });
     it("should mint emit log", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.emit(automatorBase, "ProductsMinted");
     });
     it("should fail minting products with invalid signature", async function () {
       const signaturesSignature = await signSignatures([productMint], minter);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.be.revertedWith("Automator: invalid maker");
     });
     it("should fail if a vault is not whitelisted", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       await automatorFactory.disableVaults([vaultA.address]);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.be.revertedWith("Automator: invalid vault");
     });
     it("should fail if a maker is not whitelisted", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       await automatorFactory.disableMakers([maker.address]);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.be.revertedWith("Automator: invalid maker");
     });
     it("should fail if not enough collateral", async function () {
       const amountWd = parseEther("50");
       await automatorBase.connect(minter).withdraw(amountWd);
       const signaturesSignature = await signSignatures([productMint], maker);
-      await expect(automatorBase.connect(minter).mintProducts([productMint], signaturesSignature))
+      await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.be.revertedWith("Automator: no enough collateral to redeem");
     });
     it("should withdraw zero", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMint], signaturesSignature);
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
       await expect(automatorBase.connect(minter).withdraw(parseEther("100").sub(1000))).to.changeTokenBalance(collateral, minter, 0);
       expect(await automatorBase.totalPendingRedemptions()).to.equal(parseEther("100").sub(1000));
     });
     it("should claim revert if withdraw amount > Automator's balance", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMint], signaturesSignature);
       await automatorBase.connect(minter).withdraw(parseEther("100").sub(1000));
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]); // Fast forward 7 days
       await expect(automatorBase.connect(minter).claimRedemptions())
@@ -516,7 +516,7 @@ describe("Automator", function () {
     //burn
     it("should successfully burn products", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMint], signaturesSignature);
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultA, receipt);
       const productBurn  = {
@@ -541,7 +541,7 @@ describe("Automator", function () {
     it("should burn products with loss", async function () {
       const signaturesSignature = await signSignatures([productMintC], maker);
       //console.log("before mint time:", await time.latest());
-      const tx = await automatorBase.connect(minter).mintProducts([productMintC], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMintC], signaturesSignature);
       //console.log("after mint time:", await time.latest());
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultC, receipt);
@@ -567,7 +567,7 @@ describe("Automator", function () {
     });*/
     it("should burn products with no loss and no profit", async function () {
       const signaturesSignature = await signSignatures([productMintD], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMintD], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMintD], signaturesSignature);
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultA, receipt);
       const productBurn  = {
@@ -592,7 +592,7 @@ describe("Automator", function () {
     it("should successfully mint/burn two products", async function () {
       await automatorBase.connect(minter).deposit(ethers.utils.parseEther("100"));
       const signaturesSignature = await signSignatures([productMint, productMintB], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMint, productMintB], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMint, productMintB], signaturesSignature);
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultA, receipt);
       const productBurn  = {
@@ -620,14 +620,14 @@ describe("Automator", function () {
       expect(await automatorBase.getPricePerShare()).to.equal(parseEther("1.097"));
       expect(await automatorBase.totalCollateral()).to.equal(parseEther("219.4"));
       expect(await automatorBase.totalSupply()).to.equal(parseEther("200"));
-      console.log("owner:", await automatorBase.owner());
+      // console.log("owner:", await automatorBase.owner());
       await expect(automatorBase.harvest())
-        .to.changeTokenBalances(collateral, [automatorBase, feeCollector], [parseEther("0.2").mul(-1), parseEther("0.2")]);
+        .to.changeTokenBalances(collateral, [automatorBase, feeCollector], [parseEther("0.6").mul(-1), parseEther("0.2")]);
       expect(await automatorBase.totalFee()).to.equal(0);
     });
     it("should claim pending redemptions", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMint], signaturesSignature);
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultA, receipt);
       const productBurn  = {
@@ -649,7 +649,7 @@ describe("Automator", function () {
     });
     it("should successfully deposit after growth in fund value", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMint], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMint], signaturesSignature);
       const receipt = await tx.wait();
       const collateralAtRiskPercentage = getCatRP(vaultA, receipt);
       const productBurn  = {
@@ -684,7 +684,7 @@ describe("Automator", function () {
     });
     it("should claim if burn with loss", async function () {
       const signaturesSignature = await signSignatures([productMintC], maker);
-      const tx = await automatorBase.connect(minter).mintProducts([productMintC], signaturesSignature);
+      const tx = await automatorBase.mintProducts([productMintC], signaturesSignature);
       const receipt = await tx.wait();
       await automatorBase.connect(minter).withdraw(parseEther("100").sub(1000));
       const collateralAtRiskPercentage = getCatRP(vaultC, receipt);

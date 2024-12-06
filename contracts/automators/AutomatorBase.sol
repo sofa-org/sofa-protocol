@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -45,10 +44,11 @@ interface IAutomatorFactory {
     function feeCollector() external view returns (address);
 }
 
-contract AutomatorBase is Ownable, ERC1155Holder, ERC20, ReentrancyGuard {
+contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
+    address private _owner;
     IERC20 public collateral;
     uint256 public feeRate;
     address public immutable factory;
@@ -83,16 +83,57 @@ contract AutomatorBase is Ownable, ERC1155Holder, ERC20, ReentrancyGuard {
     event ProductsMinted(ProductMint[] products);
     event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, uint256 fee);
     event FeeCollected(address account, uint256 fee, uint256 protocolFee);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor() ERC20("", "") {
         factory = _msgSender();
     }
 
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Internal function without access restriction.
+     */
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+
+    /**
+     * @dev Throws if the sender is not the owner.
+     */
+    function _checkOwner() internal view virtual {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+    }
+
     function initialize(
+        address owner_,
         address collateral_,
         uint256 feeRate_
     ) external {
         require(_msgSender() == factory, "Automator: forbidden");
+        _owner = owner_;
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
     }
@@ -101,7 +142,7 @@ contract AutomatorBase is Ownable, ERC1155Holder, ERC20, ReentrancyGuard {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
         uint256 shares;
         if (totalSupply() == 0) {
-            shares = amount;
+            shares = amount - MINIMUM_SHARES;
             _mint(address(0x000000000000000000000000000000000000dEaD), MINIMUM_SHARES);
         } else {
             shares = amount * totalSupply() / totalCollateral;
@@ -145,7 +186,7 @@ contract AutomatorBase is Ownable, ERC1155Holder, ERC20, ReentrancyGuard {
     function mintProducts(
         ProductMint[] calldata products,
         bytes calldata signature
-    ) external nonReentrant {
+    ) external nonReentrant onlyOwner {
         bytes32 signatures;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");

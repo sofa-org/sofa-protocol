@@ -17,9 +17,9 @@ contract AutomatorFactory is Ownable {
     address[] public automators;
     mapping(address => mapping(address => address)) public getAutomator;
 
-    event ReferralSet(address indexed oldReferral, address indexed newReferral);
-    event FeeCollectorSet(address indexed oldFeeCollector, address indexed newFeeCollector);
-    event AutomatorCreated(address indexed automator, address indexed collateral, uint256 feeRate);
+    event ReferralSet(address oldReferral, address newReferral);
+    event FeeCollectorSet(address oldFeeCollector, address newFeeCollector);
+    event AutomatorCreated(address indexed creator, address indexed collateral, address automator, uint256 feeRate);
     event VaultsEnabled(address[] vaults);
     event VaultsDisabled(address[] vaults);
     event MakersEnabled(address[] makers);
@@ -37,10 +37,10 @@ contract AutomatorFactory is Ownable {
     ) external returns (address) {
         bytes32 salt = keccak256(abi.encodePacked(_msgSender(), collateral));
         address _automator = Clones.cloneDeterministic(automator, salt);
-        AutomatorBase(_automator).initialize(collateral, feeRate);
+        AutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate);
         getAutomator[_msgSender()][collateral] = _automator;
         automators.push(_automator);
-        emit AutomatorCreated(_automator, collateral, feeRate);
+        emit AutomatorCreated(_msgSender(), collateral, _automator, feeRate);
         return _automator;
     }
 
