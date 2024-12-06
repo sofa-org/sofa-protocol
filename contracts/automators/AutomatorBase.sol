@@ -10,6 +10,10 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IFeeCollector.sol";
+import {IPool} from "@aave/core-v3/contracts/interfaces/IPool.sol";
+import {DataTypes} from "@aave/core-v3/contracts/protocol/libraries/types/DataTypes.sol";
+import {ReserveLogic} from "@aave/core-v3/contracts/protocol/libraries/logic/ReserveLogic.sol";
+import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
 
 struct Product {
     uint256 expiry;
@@ -56,7 +60,12 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     uint256 public totalFee;
     uint256 public totalPendingRedemptions;
-    uint256 public totalCollateral;
+    uint256 public totalPositions;
+
+    // Aave Referral Code
+    IAToken public aToken;
+    IPool public immutable pool;
+    uint16 private constant REFERRAL_CODE = 0;
 
     mapping(bytes32 => uint256) private _positions;
     mapping(address => Redemption) private _redemptions;
@@ -85,7 +94,8 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     event FeeCollected(address account, uint256 fee, uint256 protocolFee);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    constructor() ERC20("", "") {
+    constructor(address pool_) ERC20("", "") {
+        pool = IPool(pool_);
         factory = _msgSender();
     }
 
@@ -136,18 +146,20 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         _owner = owner_;
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
+        aToken = IAToken(pool.getReserveData(collateral_).aTokenAddress);
+        collateral.safeApprove(address(pool), type(uint256).max);
     }
 
     function deposit(uint256 amount) external nonReentrant {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
+        pool.supply(address(collateral), amount, address(this), REFERRAL_CODE);
         uint256 shares;
         if (totalSupply() == 0) {
             shares = amount - MINIMUM_SHARES;
             _mint(address(0x000000000000000000000000000000000000dEaD), MINIMUM_SHARES);
         } else {
-            shares = amount * totalSupply() / totalCollateral;
+            shares = amount * totalSupply() / (totalCollateral() - amount);
         }
-        totalCollateral += amount;
         _mint(_msgSender(), shares);
         emit Deposited(_msgSender(), amount, shares);
     }
@@ -171,14 +183,13 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
         uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
-        require(collateral.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
+        require(aToken.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
 
         totalPendingRedemptions -= pendingRedemption;
         _redemptions[_msgSender()].pendingRedemption = 0;
-        totalCollateral -= amount;
 
         _burn(_msgSender(), pendingRedemption);
-        collateral.safeTransfer(_msgSender(), amount);
+        require(pool.withdraw(address(collateral), amount, _msgSender()) > 0, "Automator: withdraw failed");
 
         emit RedemptionsClaimed(_msgSender(), amount, pendingRedemption);
     }
@@ -188,11 +199,12 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         bytes calldata signature
     ) external nonReentrant onlyOwner {
         bytes32 signatures;
+        uint256 _totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");
             // approve vaults
-            if (IERC20(collateral).allowance(address(this), products[i].vault) == 0) {
-                IERC20(collateral).approve(products[i].vault, type(uint256).max);
+            if (aToken.allowance(address(this), products[i].vault) == 0) {
+                aToken.approve(products[i].vault, type(uint256).max);
             }
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
@@ -202,12 +214,14 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             uint256 collateralAtRiskPercentage = products[i].mintParams.collateralAtRisk * 1e18 / products[i].totalCollateral;
             bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices, collateralAtRiskPercentage));
             _positions[id] = _positions[id] + products[i].totalCollateral - products[i].mintParams.makerCollateral;
+            _totalPositions += products[i].totalCollateral - products[i].mintParams.makerCollateral;
             signatures = signatures ^ keccak256(abi.encodePacked(products[i].mintParams.maker, products[i].mintParams.makerSignature));
         }
+        totalPositions += _totalPositions;
 
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(IAutomatorFactory(factory).makers(signer), "Automator: invalid maker");
-        require(collateral.balanceOf(address(this)) >= totalFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+        require(aToken.balanceOf(address(this)) >= totalFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
 
         emit ProductsMinted(products);
     }
@@ -216,22 +230,22 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         ProductBurn[] calldata products
     ) external nonReentrant {
         uint256 totalEarned;
-        uint256 totalPositions;
+        uint256 _totalPositions;
         uint256 fee;
         for (uint256 i = 0; i < products.length; i++) {
             for (uint256 j = 0; j < products[i].products.length; j++) {
-                uint256 balanceBefore = collateral.balanceOf(address(this));
+                uint256 balanceBefore = aToken.balanceOf(address(this));
                 IVault(products[i].vault).burn(
                     products[i].products[j].expiry,
                     products[i].products[j].anchorPrices,
                     products[i].products[j].collateralAtRiskPercentage,
                     0
                 );
-                uint256 balanceAfter = collateral.balanceOf(address(this));
+                uint256 balanceAfter = aToken.balanceOf(address(this));
                 uint256 earned = balanceAfter - balanceBefore;
                 totalEarned += earned;
                 bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[j].expiry, products[i].products[j].anchorPrices, products[i].products[j].collateralAtRiskPercentage));
-                totalPositions += _positions[id];
+                _totalPositions += _positions[id];
                 if (earned > _positions[id]) {
                     fee += (earned - _positions[id]) * (IFeeCollector(IAutomatorFactory(factory).feeCollector()).tradingFeeRate() + feeRate) / 1e18;
                 }
@@ -242,13 +256,9 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             totalFee += fee;
             totalEarned -= fee;
         }
-        if (totalEarned > totalPositions) {
-            totalCollateral += totalEarned - totalPositions;
-        } else if (totalEarned < totalPositions) {
-            totalCollateral -= totalPositions - totalEarned;
-        }
+        totalPositions -= _totalPositions;
 
-        emit ProductsBurned(products, totalCollateral, fee);
+        emit ProductsBurned(products, totalCollateral(), fee);
     }
 
     function harvest() external {
@@ -256,8 +266,8 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 protocolFee = totalFee - fee;
         require(fee > 0, "Automator: zero fee");
         totalFee = 0;
-        collateral.safeTransfer(owner(), fee);
-        collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), protocolFee);
+        pool.withdraw(address(collateral), fee, owner());
+        pool.withdraw(address(collateral), protocolFee, IAutomatorFactory(factory).feeCollector());
 
         emit FeeCollected(_msgSender(), fee, protocolFee);
     }
@@ -282,7 +292,7 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         if (totalSupply() == 0) {
             return 1e18;
         } else {
-            return totalCollateral * 1e18 / totalSupply();
+            return totalCollateral() * 1e18 / totalSupply();
         }
     }
 
@@ -292,6 +302,10 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         } else {
             return 0;
         }
+    }
+
+    function totalCollateral() public view returns (uint256) {
+        return aToken.balanceOf(address(this)) + totalPositions;
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {

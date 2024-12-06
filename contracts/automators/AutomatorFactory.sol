@@ -25,10 +25,10 @@ contract AutomatorFactory is Ownable {
     event MakersEnabled(address[] makers);
     event MakersDisabled(address[] makers);
 
-    constructor(address referral_, address feeCollector_) {
+    constructor(address referral_, address feeCollector_, address pool_) {
         referral = referral_;
         feeCollector = feeCollector_;
-        automator = address(new AutomatorBase());
+        automator = address(new AutomatorBase(pool_));
     }
 
     function createAutomator(

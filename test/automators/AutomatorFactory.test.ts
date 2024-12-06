@@ -1,18 +1,28 @@
 import { ethers } from "hardhat";
 import { expect } from "chai";
 import { Contract } from "ethers";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import {
+  deployFixture,
+} from "../helpers/helpers";
+
 
 describe("AutomatorFactory", function () {
   let automatorFactory: Contract;
   let owner: any;
   let addr1: any;
   let addr2: any;
+  let collateral: any;
+  let aavePool: any;
 
   beforeEach(async function () {
     [owner, addr1, addr2] = await ethers.getSigners();
-
+    ({
+      collateral,
+      aavePool,
+    } = await loadFixture(deployFixture));
     const AutomatorFactory = await ethers.getContractFactory("AutomatorFactory");
-    automatorFactory = await AutomatorFactory.deploy(addr1.address, addr2.address);
+    automatorFactory = await AutomatorFactory.deploy(addr1.address, addr2.address, aavePool.address);
     await automatorFactory.deployed();
   });
 
@@ -50,20 +60,16 @@ describe("AutomatorFactory", function () {
 
   describe("Automator Creation", function () {
     it("should create a new automator", async function () {
-      const collateral = ethers.constants.AddressZero;
       const feeRate = 1000;
 
-      await expect(automatorFactory.createAutomator(feeRate, collateral))
+      await expect(automatorFactory.createAutomator(feeRate, collateral.address))
         .to.emit(automatorFactory, "AutomatorCreated")
-        .withArgs(owner.address, collateral, await automatorFactory.getAutomator(owner.address, collateral), feeRate);
+        .withArgs(owner.address, collateral.address, await automatorFactory.getAutomator(owner.address, collateral.address), feeRate);
     });
 
     it("should return the correct number of automators", async function () {
-      const collateral1 = ethers.constants.AddressZero;
-      const collateral2 = addr1.address;
-
-      await automatorFactory.createAutomator(1000, collateral1);
-      await automatorFactory.createAutomator(2000, collateral2);
+      await automatorFactory.createAutomator(1000, collateral.address);
+      await automatorFactory.connect(addr1).createAutomator(2000, collateral.address);
 
       expect(await automatorFactory.automatorsLength()).to.equal(2);
     });

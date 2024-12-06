@@ -99,7 +99,7 @@ describe("Automator", function () {
     // ]);
     const feeRate = parseEther("0.02");
     const AutomatorFactory = await ethers.getContractFactory("AutomatorFactory");
-    automatorFactory = await AutomatorFactory.deploy(referral.address, feeCollector.address);
+    automatorFactory = await AutomatorFactory.deploy(referral.address, feeCollector.address, aavePool.address);
     await automatorFactory.deployed();
     const tx = await automatorFactory.createAutomator(feeRate, collateral.address);
     const receipt = await tx.wait();
