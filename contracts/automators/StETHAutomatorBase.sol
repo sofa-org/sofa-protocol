@@ -54,7 +54,8 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     address public immutable factory;
     uint256 public constant MINIMUM_SHARES = 10**3;
 
-    uint256 public totalFee;
+    int256 public totalFee;
+    uint256 public totalProtocolFee;
     uint256 public totalPendingRedemptions;
     uint256 public totalPositions;
 
@@ -81,8 +82,8 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     event Withdrawn(address indexed account, uint256 shares);
     event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
     event ProductsMinted(ProductMint[] products);
-    event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, uint256 fee);
-    event FeeCollected(address account, uint256 fee, uint256 protocolFee);
+    event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, int256 fee, uint256 protocolFee);
+    event FeeCollected(address account, int256 fee, uint256 protocolFee);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor() ERC20("", "") {
@@ -204,7 +205,11 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(IAutomatorFactory(factory).makers(signer), "Automator: invalid maker");
-        require(collateral.balanceOf(address(this)) >= totalFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+        if (totalFee > 0) {
+            require(collateral.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+        } else {
+            require(collateral.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+        }
 
         emit ProductsMinted(products);
     }
@@ -213,7 +218,8 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         ProductBurn[] calldata products
     ) external nonReentrant {
         uint256 _totalPositions;
-        uint256 fee;
+        int256 fee;
+        uint256 protocolFee;
         for (uint256 i = 0; i < products.length; i++) {
             for (uint256 j = 0; j < products[i].products.length; j++) {
                 uint256 balanceBefore = collateral.balanceOf(address(this));
@@ -228,28 +234,37 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
                 bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[j].expiry, products[i].products[j].anchorPrices, products[i].products[j].collateralAtRiskPercentage));
                 _totalPositions += _positions[id];
                 if (earned > _positions[id]) {
-                    fee += (earned - _positions[id]) * (IFeeCollector(IAutomatorFactory(factory).feeCollector()).tradingFeeRate() + feeRate) / 1e18;
+                    fee += int256((earned - _positions[id]) * feeRate / 1e18);
+                    protocolFee += (earned - _positions[id]) * IFeeCollector(IAutomatorFactory(factory).feeCollector()).tradingFeeRate() / 1e18;
+                }
+                if (earned < _positions[id]) {
+                    fee -= int256((_positions[id] - earned) * feeRate / 1e18);
                 }
                 delete _positions[id];
             }
         }
-        if (fee > 0) {
+        if (fee != 0) {
             totalFee += fee;
+        }
+        if (protocolFee > 0) {
+            totalProtocolFee += protocolFee;
         }
         totalPositions -= _totalPositions;
 
-        emit ProductsBurned(products, totalCollateral(), fee);
+        emit ProductsBurned(products, totalCollateral(), fee, protocolFee);
     }
 
-    function harvest() external {
-        uint256 fee = totalFee * feeRate / (IFeeCollector(IAutomatorFactory(factory).feeCollector()).tradingFeeRate() + feeRate);
-        uint256 protocolFee = totalFee - fee;
-        require(fee > 0, "Automator: zero fee");
-        totalFee = 0;
-        collateral.safeTransfer(owner(), fee);
-        collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), protocolFee);
-
-        emit FeeCollected(_msgSender(), fee, protocolFee);
+    function harvest() external nonReentrant {
+        require(totalFee > 0 || totalProtocolFee > 0, "Automator: zero fee");
+        emit FeeCollected(_msgSender(), totalFee, totalProtocolFee);
+        if (totalFee > 0) {
+            collateral.safeTransfer(owner(), uint256(totalFee));
+            totalFee = 0;
+        }
+        if (totalProtocolFee > 0) {
+            collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), totalProtocolFee);
+            totalProtocolFee = 0;
+        }
     }
 
     function name() public view virtual override returns (string memory) {
@@ -285,7 +300,11 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function totalCollateral() public view returns (uint256) {
-        return collateral.balanceOf(address(this)) + totalPositions - totalFee;
+        if (totalFee > 0) {
+            return collateral.balanceOf(address(this)) + totalPositions - uint256(totalFee);
+        } else {
+            return collateral.balanceOf(address(this)) + totalPositions;
+        }
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
