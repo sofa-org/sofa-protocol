@@ -263,7 +263,6 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         if (fee != 0) {
             totalFee += fee;
         }
-
         if (protocolFee > 0) {
             totalProtocolFee += protocolFee;
         }
