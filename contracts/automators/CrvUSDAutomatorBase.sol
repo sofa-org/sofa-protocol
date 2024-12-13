@@ -224,7 +224,6 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     function burnProducts(
         ProductBurn[] calldata products
     ) external nonReentrant {
-        uint256 totalEarned;
         uint256 _totalPositions;
         uint256 fee;
         for (uint256 i = 0; i < products.length; i++) {
@@ -238,7 +237,6 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
                 );
                 uint256 balanceAfter = scrvUSD.balanceOf(address(this));
                 uint256 earned = balanceAfter - balanceBefore;
-                totalEarned += earned;
                 bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[j].expiry, products[i].products[j].anchorPrices, products[i].products[j].collateralAtRiskPercentage));
                 _totalPositions += _positions[id];
                 if (earned > _positions[id]) {
@@ -249,7 +247,6 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         }
         if (fee > 0) {
             totalFee += fee;
-            totalEarned -= fee;
         }
         totalPositions -= _totalPositions;
 
@@ -300,7 +297,7 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function totalCollateral() public view returns (uint256) {
-        return scrvUSD.balanceOf(address(this)) + totalPositions;
+        return scrvUSD.balanceOf(address(this)) + totalPositions - totalFee;
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
