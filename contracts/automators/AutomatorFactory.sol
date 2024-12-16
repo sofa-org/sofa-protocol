@@ -15,6 +15,7 @@ contract AutomatorFactory is Ownable {
     mapping(address => bool) public makers;
 
     address[] public automators;
+    mapping(address => uint256) public credits;
     mapping(address => mapping(address => address)) public getAutomator;
 
     event ReferralSet(address oldReferral, address newReferral);
@@ -24,6 +25,7 @@ contract AutomatorFactory is Ownable {
     event VaultsDisabled(address[] vaults);
     event MakersEnabled(address[] makers);
     event MakersDisabled(address[] makers);
+    event CreditsTopUp(address indexed user, uint256 amount);
 
     constructor(address referral_, address feeCollector_, address pool_) {
         referral = referral_;
@@ -35,6 +37,8 @@ contract AutomatorFactory is Ownable {
         uint256 feeRate,
         address collateral
     ) external returns (address) {
+        require(credits[_msgSender()] > 0, "AutomatorFactory: insufficient credits");
+        credits[_msgSender()] -= 1;
         bytes32 salt = keccak256(abi.encodePacked(_msgSender(), collateral));
         address _automator = Clones.cloneDeterministic(automator, salt);
         AAVEAutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate);
@@ -58,6 +62,11 @@ contract AutomatorFactory is Ownable {
         require(feeCollector_ != address(0), "AutomatorFactory: feeCollector is the zero address");
         emit FeeCollectorSet(feeCollector, feeCollector_);
         feeCollector = feeCollector_;
+    }
+
+    function topUp(address user, uint256 amount) external onlyOwner {
+        credits[user] += amount;
+        emit CreditsTopUp(user, amount);
     }
 
     function enableVaults(address[] calldata vaults_) external onlyOwner {
