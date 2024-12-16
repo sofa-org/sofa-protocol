@@ -20,7 +20,7 @@ contract AutomatorFactory is Ownable {
 
     event ReferralSet(address oldReferral, address newReferral);
     event FeeCollectorSet(address oldFeeCollector, address newFeeCollector);
-    event AutomatorCreated(address indexed creator, address indexed collateral, address automator, uint256 feeRate);
+    event AutomatorCreated(address indexed creator, address indexed collateral, address automator, uint256 feeRate, uint256 maxPeriod);
     event VaultsEnabled(address[] vaults);
     event VaultsDisabled(address[] vaults);
     event MakersEnabled(address[] makers);
@@ -35,16 +35,17 @@ contract AutomatorFactory is Ownable {
 
     function createAutomator(
         uint256 feeRate,
+        uint256 maxPeriod,
         address collateral
     ) external returns (address) {
         require(credits[_msgSender()] > 0, "AutomatorFactory: insufficient credits");
         credits[_msgSender()] -= 1;
         bytes32 salt = keccak256(abi.encodePacked(_msgSender(), collateral));
         address _automator = Clones.cloneDeterministic(automator, salt);
-        AAVEAutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate);
+        AAVEAutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate, maxPeriod);
         getAutomator[_msgSender()][collateral] = _automator;
         automators.push(_automator);
-        emit AutomatorCreated(_msgSender(), collateral, _automator, feeRate);
+        emit AutomatorCreated(_msgSender(), collateral, _automator, feeRate, maxPeriod);
         return _automator;
     }
 

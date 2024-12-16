@@ -49,6 +49,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     address private _owner;
     IERC20 public collateral;
     uint256 public feeRate;
+    uint256 public maxPeriod;
     address public immutable factory;
     uint256 public constant MINIMUM_SHARES = 10**3;
 
@@ -129,12 +130,14 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     function initialize(
         address owner_,
         address collateral_,
-        uint256 feeRate_
+        uint256 feeRate_,
+        uint256 maxPeriod_
     ) external {
         require(_msgSender() == factory, "Automator: forbidden");
         _owner = owner_;
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
+        maxPeriod = maxPeriod_;
     }
 
     function deposit(uint256 amount) external nonReentrant {
@@ -165,7 +168,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function claimRedemptions() external nonReentrant {
         require(_redemptions[_msgSender()].pendingRedemption > 0, "Automator: no pending redemption");
-        require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + 7 days + 3 days, "Automator: invalid redemption");
+        require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod + 3 days, "Automator: invalid redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
         uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
@@ -188,6 +191,8 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 _totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");
+            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
+            require(period <= maxPeriod, "Automator: exceed maxPeriod");
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
                 products[i].mintParams,
