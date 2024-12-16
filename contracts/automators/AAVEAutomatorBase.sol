@@ -18,13 +18,11 @@ import {IAToken} from "@aave/core-v3/contracts/interfaces/IAToken.sol";
 struct Product {
     uint256 expiry;
     uint256[2] anchorPrices;
-    uint256 collateralAtRiskPercentage;
 }
 
 struct MintParams {
     uint256 expiry;
     uint256[2] anchorPrices;
-    uint256 collateralAtRisk;
     uint256 makerCollateral;
     uint256 deadline;
     address maker;
@@ -38,7 +36,7 @@ interface IVault {
         address referral
     ) external;
 
-    function burn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 collateralAtRiskPercentage, uint256 isMaker) external;
+    function burn(uint256 expiry, uint256[2] calldata anchorPrices, uint256 isMaker) external;
 }
 
 interface IAutomatorFactory {
@@ -212,8 +210,7 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
                 products[i].mintParams,
                 IAutomatorFactory(factory).referral()
             );
-            uint256 collateralAtRiskPercentage = products[i].mintParams.collateralAtRisk * 1e18 / products[i].totalCollateral;
-            bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices, collateralAtRiskPercentage));
+            bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].mintParams.expiry, products[i].mintParams.anchorPrices));
             _positions[id] = _positions[id] + products[i].totalCollateral - products[i].mintParams.makerCollateral;
             _totalPositions += products[i].totalCollateral - products[i].mintParams.makerCollateral;
             signatures = signatures ^ keccak256(abi.encodePacked(products[i].mintParams.maker, products[i].mintParams.makerSignature));
@@ -243,12 +240,11 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
                 IVault(products[i].vault).burn(
                     products[i].products[j].expiry,
                     products[i].products[j].anchorPrices,
-                    products[i].products[j].collateralAtRiskPercentage,
                     0
                 );
                 uint256 balanceAfter = aToken.balanceOf(address(this));
                 uint256 earned = balanceAfter - balanceBefore;
-                bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[j].expiry, products[i].products[j].anchorPrices, products[i].products[j].collateralAtRiskPercentage));
+                bytes32 id = keccak256(abi.encodePacked(products[i].vault, products[i].products[j].expiry, products[i].products[j].anchorPrices));
                 _totalPositions += _positions[id];
                 if (earned > _positions[id]) {
                     fee += int256((earned - _positions[id]) * feeRate / 1e18);
