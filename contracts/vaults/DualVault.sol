@@ -19,6 +19,11 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 expiry;
         uint256 anchorPrice;
     }
+    struct MinterProduct {
+        uint256 expiry;
+        uint256 anchorPrice;
+        uint256 premiumPercentage;
+    }
     struct MintParams {
         uint256 expiry;
         uint256 anchorPrice;
@@ -46,14 +51,16 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
     IERC20Metadata public quoteAsset;
 
     uint256 public totalFee;
+    uint256 public totalQuoteFee;
+    address public feeCollector;
     mapping(uint256 => uint256) public quotePositions;
     mapping(uint256 => uint256) public totalPositions;
 
     // Events
     event Minted(address minter, address maker, address referral, uint256 totalCollateral, uint256 expiry, uint256 anchorPrice, uint256 makerCollateral);
     event Quoted(address operator, uint256 productId, uint256 amount, uint256 quoteAmount);
-    event Burned(address operator, uint256 productId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff);
-    event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs);
+    event Burned(address operator, uint256 productId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee);
+    event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs, uint256[] fees, uint256[] quoteFees);
 
     receive() external payable {}
 
@@ -122,12 +129,11 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         // transfer makerCollateral
         collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
         }
-
-
         // mint product
-        uint256 productId = getProductId(params.expiry, params.anchorPrice, uint256(0));
-        uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, uint256(1));
-        _mint(_msgSender(), productId, totalCollateral, "");
+        uint256 productId = getProductId(params.expiry, params.anchorPrice, 0);
+        uint256 minterProductId = getMinterProductId(params.expiry, params.anchorPrice, params.makerCollateral * 1e18 / totalCollateral);
+        uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, 1);
+        _mint(_msgSender(), minterProductId, totalCollateral, "");
         _mint(params.maker, makerProductId, totalCollateral, "");
         totalPositions[productId] += totalCollateral;
 
@@ -151,7 +157,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
 
     function _mintBatch(uint256[] memory totalCollaterals, MintParams[] memory paramsArray, address referral) internal {
         require(referral != _msgSender(), "Vault: invalid referral");
-        uint256[] memory productIds = new uint256[](paramsArray.length);
+        uint256[] memory minterProductIds = new uint256[](paramsArray.length);
         for (uint256 i = 0; i < paramsArray.length; i++) {
             uint256 totalCollateral = totalCollaterals[i];
             MintParams memory params = paramsArray[i];
@@ -184,14 +190,15 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
             totalCollaterals[i] = totalCollateral;
 
             // mint product
-            productIds[i] = getProductId(params.expiry, params.anchorPrice, uint256(0));
-            uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, uint256(1));
+            uint256 productId = getProductId(params.expiry, params.anchorPrice, 0);
+            minterProductIds[i] = getMinterProductId(params.expiry, params.anchorPrice, params.makerCollateral * 1e18 / totalCollateral);
+            uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, 1);
             _mint(params.maker, makerProductId, totalCollateral, "");
-            totalPositions[productIds[i]] += totalCollateral;
+            totalPositions[productId] += totalCollateral;
 
             emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral);
         }
-        _mintBatch(_msgSender(), productIds, totalCollaterals, "");
+        _mintBatch(_msgSender(), minterProductIds, totalCollaterals, "");
     }
 
     function quote(uint256 amount, Product calldata product) external {
@@ -230,81 +237,128 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         collateral.safeTransfer(_msgSender(), totalCollateralAmount);
     }
 
-    function burn(uint256 expiry, uint256 anchorPrice) external {
-        (uint256 collateralPayoff, uint256 quoteAssetPayoff) = _burn(expiry, anchorPrice);
+    function burn(uint256 expiry, uint256 anchorPrice, uint256 premiumPercentage) external {
+        (uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee) = _burn(expiry, anchorPrice, premiumPercentage);
         if (collateralPayoff > 0) {
             collateral.safeTransfer(_msgSender(), collateralPayoff);
+            totalFee += fee;
         }
         if (quoteAssetPayoff > 0) {
             quoteAsset.safeTransfer(_msgSender(), quoteAssetPayoff);
+            totalQuoteFee += quoteFee;
         }
     }
 
-    function _burn(uint256 expiry, uint256 anchorPrice) internal nonReentrant returns (uint256 collateralPayoff, uint256 quoteAssetPayoff) {
+    function _burn(uint256 expiry, uint256 anchorPrice, uint256 premiumPercentage) internal nonReentrant returns (uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee) {
         require(block.timestamp >= expiry + 2 hours, "Vault: not expired");
         uint256 productId = getProductId(expiry, anchorPrice, 0);
-        uint256 amount = balanceOf(_msgSender(), productId);
+        uint256 minterProductId = getMinterProductId(expiry, anchorPrice, premiumPercentage);
+        uint256 amount = balanceOf(_msgSender(), minterProductId);
         require(amount > 0, "Vault: zero amount");
 
         uint256 totalPosition = totalPositions[productId];
         uint256 makerPosition = quotePositions[getProductId(expiry, anchorPrice, 1)];
         collateralPayoff = amount - amount * makerPosition / totalPosition;
         quoteAssetPayoff = (amount - collateralPayoff) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        uint256 feeRate = getFeeRate(premiumPercentage);
+        fee = collateralPayoff * premiumPercentage * feeRate / 1e18 / 100;
+        quoteFee = quoteAssetPayoff * premiumPercentage * feeRate / 1e18 / 100;
+        collateralPayoff -= fee;
+        quoteAssetPayoff -= quoteFee;
 
         // burn product
-        _burn(_msgSender(), productId, amount);
+        _burn(_msgSender(), minterProductId, amount);
 
-        emit Burned(_msgSender(), productId, amount, collateralPayoff, quoteAssetPayoff);
+        emit Burned(_msgSender(), minterProductId, amount, collateralPayoff, quoteAssetPayoff, fee, quoteFee);
     }
 
-    function burnBatch(Product[] calldata products) external {
-        (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff) = _burnBatch(products);
+    function burnBatch(MinterProduct[] calldata products) external {
+        (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff, uint256 fees, uint256 quoteFees) = _burnBatch(products);
 
         // check self balance of collateral and transfer payoff
         if (totalCollateralPayoff > 0) {
             collateral.safeTransfer(_msgSender(), totalCollateralPayoff);
+            totalFee += fees;
         }
         if (totalQuoteAssetPayoff > 0) {
             quoteAsset.safeTransfer(_msgSender(), totalQuoteAssetPayoff);
+            totalQuoteFee += quoteFees;
         }
     }
 
-    function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff) {
-        uint256[] memory productIds = new uint256[](products.length);
+    function _burnBatch(MinterProduct[] calldata products) internal nonReentrant returns (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff, uint256 fees, uint256 quoteFees) {
+        uint256[] memory minterProductIds = new uint256[](products.length);
         uint256[] memory amounts = new uint256[](products.length);
-        uint256[] memory collateralPayoffs = new uint256[](products.length);
-        uint256[] memory quoteAssetPayoffs = new uint256[](products.length);
         for (uint256 i = 0; i < products.length; i++) {
-            Product memory product = products[i];
-            uint256 productId = getProductId(product.expiry, product.anchorPrice, 0);
-            uint256 amount = balanceOf(_msgSender(), productId);
-            require(amount > 0, "Vault: zero amount");
-            require(block.timestamp >= product.expiry + 2 hours, "Vault: not expired");
-            uint256 totalPosition = totalPositions[productId];
-            uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
-            uint256 collateralPayoff = amount - amount * makerPosition / totalPosition;
-            uint256 quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
-
-            productIds[i] = productId;
+            (uint256 minterProductId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee) = _processProduct(products[i]);
+            minterProductIds[i] = minterProductId;
             amounts[i] = amount;
-            collateralPayoffs[i] = collateralPayoff;
-            quoteAssetPayoffs[i] = quoteAssetPayoff;
             totalCollateralPayoff += collateralPayoff;
             totalQuoteAssetPayoff += quoteAssetPayoff;
+            fees += fee;
+            quoteFees += quoteFee;
+            emit Burned(_msgSender(), minterProductId, amount, collateralPayoff, quoteAssetPayoff, fee, quoteFee);
         }
         // burn product
-        _burnBatch(_msgSender(), productIds, amounts);
-        emit BatchBurned(_msgSender(), productIds, amounts, collateralPayoffs, quoteAssetPayoffs);
+        _burnBatch(_msgSender(), minterProductIds, amounts);
     }
 
+    function _processProduct(MinterProduct memory product) internal view returns (uint256 minterProductId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee) {
+        minterProductId = getMinterProductId(product.expiry, product.anchorPrice, product.premiumPercentage);
+        amount = balanceOf(_msgSender(), minterProductId);
+        require(amount > 0, "Vault: zero amount");
+        require(block.timestamp >= product.expiry + 2 hours, "Vault: not expired");
+        uint256 totalPosition = totalPositions[getProductId(product.expiry, product.anchorPrice, 0)];
+        uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
+        collateralPayoff = amount - (amount * makerPosition / totalPosition);
+        quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        uint256 feeRate = getFeeRate(product.premiumPercentage);
+        fee = collateralPayoff * product.premiumPercentage * feeRate / 1e18 / 100;
+        quoteFee = quoteAssetPayoff * product.premiumPercentage * feeRate / 1e18 / 100;
+        collateralPayoff -= fee;
+        quoteAssetPayoff -= quoteFee;
+    }
+
+    function harvest() external {
+        uint256 fee = totalFee;
+        uint256 quoteFee = totalQuoteFee;
+        require(fee > 0 || quoteFee > 0, "Vault: zero fee");
+        if (fee > 0) {
+            totalFee = 0;
+            collateral.safeTransfer(feeCollector, fee);
+        }
+        if (quoteFee > 0) {
+            totalQuoteFee = 0;
+            quoteAsset.safeTransfer(feeCollector, quoteFee);
+        }
+
+    }
     // get product id by parameters
     function getProductId(uint256 expiry, uint256 anchorPrice, uint256 isMaker) public pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked(expiry, anchorPrice, isMaker)));
     }
 
+    function getMinterProductId(uint256 expiry, uint256 anchorPrice, uint256 premiumPercentage) public pure returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(expiry, anchorPrice, premiumPercentage)));
+    }
+
     // get decimals
     function decimals() external view returns (uint8) {
         return collateral.decimals();
+    }
+
+    function getFeeRate(uint256 premiumPercentage) public pure returns (uint256) {
+        if (premiumPercentage <= 10) {
+            return 2; // 2%
+        } else if (premiumPercentage <= 20) {
+            return 5; // 5%
+        } else if (premiumPercentage <= 30) {
+            return 8; // 8%
+        } else if (premiumPercentage <= 50) {
+            return 12; // 12%
+        } else {
+            return 15; // 15%
+        }
     }
 
     uint256[50] private __gap;
