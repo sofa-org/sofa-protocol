@@ -9,9 +9,9 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
-import "../../interfaces/ISmartTrendStrategy.sol";
-import "../../interfaces/ISpotOracle.sol";
-import "../../utils/SignatureBitMap.sol";
+import "../interfaces/ISmartTrendStrategy.sol";
+import "../interfaces/ISpotOracle.sol";
+import "../utils/SignatureBitMap.sol";
 
 contract SimpleSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;

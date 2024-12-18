@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IFeeCollector.sol";
 
@@ -43,7 +44,7 @@ interface IScrvUSD {
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
 }
 
-contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard {
+contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
@@ -90,15 +91,13 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard {
     event MakersDisabled(address[] makers);
     event FeeCollected(address account, uint256 amount);
 
-    constructor(address scrvUSD_) ERC20("Automator CRVUSD", "atCRVUSD") {
-        scrvUSD = IScrvUSD(scrvUSD_);
-    }
-
-    function initialize(
+    constructor(
+        address scrvUSD_,
         address collateral_,
         address referral_,
         address feeCollector_
-    ) external initializer {
+    ) ERC20("Automator CRVUSD", "atCRVUSD") {
+        scrvUSD = IScrvUSD(scrvUSD_);
         collateral = IERC20(collateral_);
         referral = referral_;
         feeCollector = feeCollector_;
