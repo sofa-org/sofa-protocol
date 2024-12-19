@@ -184,7 +184,7 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod + 3 days, "Automator: invalid redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
-        uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
+        uint256 amount = pendingRedemption * totalCollateral() / totalSupply();
         require(aToken.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
 
         totalPendingRedemptions -= pendingRedemption;
@@ -204,7 +204,7 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 _totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");
-            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
+            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800));
             require(period <= maxPeriod, "Automator: exceed maxPeriod");
             // approve vaults
             if (aToken.allowance(address(this), products[i].vault) == 0) {
@@ -225,9 +225,9 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(IAutomatorFactory(factory).makers(signer), "Automator: invalid maker");
         if (totalFee > 0) {
-            require(aToken.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(aToken.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         } else {
-            require(aToken.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(aToken.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         }
 
         emit ProductsMinted(products);
@@ -310,8 +310,10 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function getUnredeemedCollateral() external view returns (uint256) {
-        if (aToken.balanceOf(address(this)) > totalPendingRedemptions * getPricePerShare() / 1e18) {
-            return aToken.balanceOf(address(this)) - totalPendingRedemptions * getPricePerShare() / 1e18;
+        if (totalSupply() == 0) {
+            return aToken.balanceOf(address(this));
+        } else if (aToken.balanceOf(address(this)) > totalPendingRedemptions * totalCollateral() / totalSupply()) {
+            return aToken.balanceOf(address(this)) - totalPendingRedemptions * totalCollateral() / totalSupply();
         } else {
             return 0;
         }
@@ -319,9 +321,9 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function totalCollateral() public view returns (uint256) {
         if (totalFee > 0) {
-            return aToken.balanceOf(address(this)) + totalPositions - uint256(totalFee);
+            return aToken.balanceOf(address(this)) + totalPositions - uint256(totalFee) - totalProtocolFee;
         } else {
-            return aToken.balanceOf(address(this)) + totalPositions;
+            return aToken.balanceOf(address(this)) + totalPositions - totalProtocolFee;
         }
     }
 
