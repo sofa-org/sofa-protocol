@@ -183,7 +183,7 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod + 3 days, "Automator: invalid redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
-        uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
+        uint256 amount = pendingRedemption * totalCollateral() / totalSupply();
         require(zenRCH.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
 
         totalPendingRedemptions -= pendingRedemption;
@@ -203,7 +203,7 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 _totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");
-            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
+            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800));
             require(period <= maxPeriod, "Automator: exceed maxPeriod");
             // approve vaults
             if (zenRCH.allowance(address(this), products[i].vault) == 0) {
@@ -224,9 +224,9 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(IAutomatorFactory(factory).makers(signer), "Automator: invalid maker");
         if (totalFee > 0) {
-            require(zenRCH.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(zenRCH.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         } else {
-            require(zenRCH.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(zenRCH.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         }
 
         emit ProductsMinted(products);
@@ -309,8 +309,10 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function getUnredeemedCollateral() external view returns (uint256) {
-        if (zenRCH.balanceOf(address(this)) > totalPendingRedemptions * getPricePerShare() / 1e18) {
-            return zenRCH.balanceOf(address(this)) - totalPendingRedemptions * getPricePerShare() / 1e18;
+        if (totalSupply() == 0) {
+            return zenRCH.balanceOf(address(this));
+        } else if (zenRCH.balanceOf(address(this)) > totalPendingRedemptions * totalCollateral() / totalSupply()) {
+            return zenRCH.balanceOf(address(this)) - totalPendingRedemptions * totalCollateral() / totalSupply();
         } else {
             return 0;
         }
@@ -318,9 +320,9 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function totalCollateral() public view returns (uint256) {
         if (totalFee > 0) {
-            return zenRCH.balanceOf(address(this)) + totalPositions - uint256(totalFee);
+            return zenRCH.balanceOf(address(this)) + totalPositions - uint256(totalFee) - totalProtocolFee;
         } else {
-            return zenRCH.balanceOf(address(this)) + totalPositions;
+            return zenRCH.balanceOf(address(this)) + totalPositions - totalProtocolFee;
         }
     }
 
