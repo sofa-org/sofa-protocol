@@ -116,7 +116,7 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
         }
         totalCollateral += scrvUSDShares;
         _mint(_msgSender(), shares);
-        emit Deposited(_msgSender(), amount, shares);
+        emit Deposited(_msgSender(), scrvUSDShares, shares);
     }
 
     function withdraw(uint256 shares) external nonReentrant {
@@ -229,7 +229,7 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
     function enableVaults(address[] calldata vaults_) external onlyOwner {
         for (uint256 i = 0; i < vaults_.length; i++) {
             vaults[vaults_[i]] = true;
-            collateral.approve(vaults_[i], type(uint256).max);
+            scrvUSD.approve(vaults_[i], type(uint256).max);
         }
         emit VaultsEnabled(vaults_);
     }
@@ -237,7 +237,7 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
     function disableVaults(address[] calldata vaults_) external onlyOwner {
         for (uint256 i = 0; i < vaults_.length; i++) {
             vaults[vaults_[i]] = false;
-            collateral.approve(vaults_[i], 0);
+            scrvUSD.approve(vaults_[i], 0);
         }
         emit VaultsDisabled(vaults_);
     }
@@ -273,8 +273,8 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
     }
 
     function getUnredeemedCollateral() external view returns (uint256) {
-        if (collateral.balanceOf(address(this)) > totalPendingRedemptions * getPricePerShare() / 1e18) {
-            return collateral.balanceOf(address(this)) - totalPendingRedemptions * getPricePerShare() / 1e18;
+        if (scrvUSD.balanceOf(address(this)) > totalPendingRedemptions * getPricePerShare() / 1e18) {
+            return scrvUSD.balanceOf(address(this)) - totalPendingRedemptions * getPricePerShare() / 1e18;
         } else {
             return 0;
         }
