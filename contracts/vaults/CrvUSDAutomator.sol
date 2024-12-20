@@ -90,7 +90,7 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
     event VaultsDisabled(address[] vaults);
     event MakersEnabled(address[] makers);
     event MakersDisabled(address[] makers);
-    event FeeCollected(address account, uint256 amount);
+    event FeeCollected(address account, uint256 amount, uint256 yieldShares);
 
     constructor(
         address scrvUSD_,
@@ -217,9 +217,9 @@ contract CrvUSDAutomator is ERC1155Holder, ERC20, ReentrancyGuard, Ownable {
         uint256 fee = totalFee;
         require(fee > 0, "Automator: zero fee");
         totalFee = 0;
-        scrvUSD.redeem(fee, feeCollector, address(this));
+        uint256 amount = scrvUSD.redeem(fee, feeCollector, address(this));
 
-        emit FeeCollected(_msgSender(), fee);
+        emit FeeCollected(_msgSender(), amount, fee);
     }
 
     function updateReferral(address referral_) external onlyOwner {
