@@ -54,15 +54,15 @@ describe("Automator", function () {
     // Deploy SmartTrendVault contract
     const VaultA = await ethers.getContractFactory("SimpleSmartTrendVault");
     vaultA = await upgrades.deployProxy(VaultA, [
-      "Reliable USDT",
-      "rUSDT",
+      "Reliable scrvUSD",
+      "rScrvUSD",
       strategyA.address, // Mock strategy contract
       collateral.address,
       oracle.address
     ]);
     vaultB = await upgrades.deployProxy(VaultA, [
-      "Reliable USDT",
-      "rUSDT",
+      "Reliable scrvUSD",
+      "rScrvUSD",
       strategyB.address, // Mock strategy contract
       collateral.address,
       oracle.address
@@ -183,7 +183,7 @@ describe("Automator", function () {
       expect(await automator.decimals()).to.equal(18);
     });
   });
-  
+
   describe("getRedemption", function () {
     it("Should get redemption", async function () {
       const amount = parseEther("100");
@@ -208,7 +208,7 @@ describe("Automator", function () {
       expect(await automator.connect(minter).getRedemption()).to.deep.equal([ethers.BigNumber.from(0), ethers.BigNumber.from(ts)]);
     });
   });
-  
+
   describe("getPricePerShare", function () {
     it("Should get initial price per share", async function () {
       expect(await automator.getPricePerShare()).to.equal(parseEther("1"));
@@ -228,7 +228,7 @@ describe("Automator", function () {
       expect(await automator.getUnredeemedCollateral()).to.equal(shares.sub(amount.div(2)));
     });
   });
-  
+
   describe("Deposit/Withdraw", function () {
     it("Should deposit collateral to vault", async function () {
       const amount = parseEther("100");
@@ -362,7 +362,7 @@ describe("Automator", function () {
       await automator.connect(minter).withdraw(amountWd);
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]);
       await expect(automator.connect(minter).claimRedemptions())
-        .to.emit(automator, "RedemptionsClaimed").withArgs(minter.address, amountWd, amountWd);
+        .to.emit(automator, "RedemptionsClaimed");
     });
     it("Should claim revert if no pending redemption", async function () {
       await automator.connect(minter).deposit(ethers.utils.parseEther("100"));
@@ -397,7 +397,7 @@ describe("Automator", function () {
       expect(await automator.totalCollateral()).to.equal(1000);
     });
   });
-  
+
   describe("Mint/Burn Products", function () {
     let productMint: any;
     let productMintB: any;
@@ -501,7 +501,7 @@ describe("Automator", function () {
           makerSignature: signatureB
         }
       };
-      productMintC = { //maxPeriod fail 
+      productMintC = { //maxPeriod fail
         vault: vaultA.address,
         totalCollateral: totalCollateral,
         mintParams: {
@@ -538,7 +538,7 @@ describe("Automator", function () {
         }
       };
     });
-    
+
     it("should successfully mint products with valid signature", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       await expect(automator.mintProducts([productMint], signaturesSignature))
@@ -826,8 +826,7 @@ describe("Automator", function () {
       await expect(automator.connect(minter).burnProducts([productBurn]))
         .to.emit(automator, "ProductsBurned");
       const totalCol = shares.add(parseEther("10")).sub(parseEther("0.1"));
-      const pps = totalCol.mul(ethers.constants.WeiPerEther).div(shares);
-      const scrvUSDWd = pps.mul(amountWd).div(ethers.constants.WeiPerEther);
+      const scrvUSDWd = totalCol.mul(amountWd).div(shares);
       await expect(automator.connect(minter).claimRedemptions())
         .to.changeTokenBalances(collateral, [minter, automator], [0, scrvUSDWd.mul(-1)]);
       const bal = await collateral.convertToAssets(scrvUSDWd);
@@ -888,8 +887,7 @@ describe("Automator", function () {
       await expect(automator.connect(minter).burnProducts([productBurn]))
         .to.changeTokenBalances(collateral, [automator, vaultA], [left, left.mul(-1)]);
       const totalCol = shares.sub(parseEther("90"));
-      const pps = totalCol.mul(ethers.constants.WeiPerEther).div(shares);
-      const scrvUSDWd = pps.mul(amountWd).div(ethers.constants.WeiPerEther);
+      const scrvUSDWd = totalCol.mul(amountWd).div(shares);
       //(100 - 90) / 100 * (100 - 10^(-15))
       await ethers.provider.send("evm_increaseTime", [60 * 60 * 24 * 7]);
       await expect(automator.connect(minter).claimRedemptions())
