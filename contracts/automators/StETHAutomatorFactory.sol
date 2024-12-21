@@ -4,10 +4,10 @@ pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./AutomatorBase.sol";
+import "./StETHAutomatorBase.sol";
 import "hardhat/console.sol";
 
-contract AutomatorFactory is Ownable {
+contract StETHAutomatorFactory is Ownable {
     address public referral;
     address public feeCollector;
     address public immutable automator;
@@ -30,7 +30,7 @@ contract AutomatorFactory is Ownable {
     constructor(address referral_, address feeCollector_) {
         referral = referral_;
         feeCollector = feeCollector_;
-        automator = address(new AutomatorBase());
+        automator = address(new StETHAutomatorBase());
     }
 
     function createAutomator(
@@ -42,7 +42,7 @@ contract AutomatorFactory is Ownable {
         credits[_msgSender()] -= 1;
         bytes32 salt = keccak256(abi.encodePacked(_msgSender(), collateral));
         address _automator = Clones.cloneDeterministic(automator, salt);
-        AutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate, maxPeriod);
+        StETHAutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate, maxPeriod);
         getAutomator[_msgSender()][collateral] = _automator;
         automators.push(_automator);
         emit AutomatorCreated(_msgSender(), collateral, _automator, feeRate, maxPeriod);
