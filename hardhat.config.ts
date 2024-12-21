@@ -54,7 +54,8 @@ const config: HardhatUserConfig = {
       forking: {
         enabled: true,
         url: process.env.MAINNET_RPC_URL as string,
-        blockNumber: 20516000,
+        //blockNumber: 20516000,   //ethereum block number for stETH related test
+        blockNumber: 21152000, //ethereum block number for ScrvUSD related test
       },
       chainId: 1,
     },
