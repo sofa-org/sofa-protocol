@@ -10,6 +10,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../utils/SignatureBitMap.sol";
+import "../interfaces/IFeeCollector.sol";
 
 contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
@@ -260,9 +261,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 makerPosition = quotePositions[getProductId(expiry, anchorPrice, 1)];
         collateralPayoff = amount - amount * makerPosition / totalPosition;
         quoteAssetPayoff = (amount - collateralPayoff) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
-        uint256 feeRate = getFeeRate(premiumPercentage);
-        fee = collateralPayoff * premiumPercentage * feeRate / 1e18 / 100;
-        quoteFee = quoteAssetPayoff * premiumPercentage * feeRate / 1e18 / 100;
+        fee = collateralPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+        quoteFee = quoteAssetPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
         collateralPayoff -= fee;
         quoteAssetPayoff -= quoteFee;
 
@@ -312,9 +312,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
         collateralPayoff = amount - (amount * makerPosition / totalPosition);
         quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
-        uint256 feeRate = getFeeRate(product.premiumPercentage);
-        fee = collateralPayoff * product.premiumPercentage * feeRate / 1e18 / 100;
-        quoteFee = quoteAssetPayoff * product.premiumPercentage * feeRate / 1e18 / 100;
+        fee = collateralPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+        quoteFee = quoteAssetPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
         collateralPayoff -= fee;
         quoteAssetPayoff -= quoteFee;
     }
@@ -345,20 +344,6 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
     // get decimals
     function decimals() external view returns (uint8) {
         return collateral.decimals();
-    }
-
-    function getFeeRate(uint256 premiumPercentage) public pure returns (uint256) {
-        if (premiumPercentage <= 10) {
-            return 2; // 2%
-        } else if (premiumPercentage <= 20) {
-            return 5; // 5%
-        } else if (premiumPercentage <= 30) {
-            return 8; // 8%
-        } else if (premiumPercentage <= 50) {
-            return 12; // 12%
-        } else {
-            return 15; // 15%
-        }
     }
 
     uint256[50] private __gap;
