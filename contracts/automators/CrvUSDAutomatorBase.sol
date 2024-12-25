@@ -44,10 +44,12 @@ interface IAutomatorFactory {
 
 interface IScrvUSD {
     function balanceOf(address account) external view returns (uint256);
-    function convertToAssets(uint256 shares) external view returns (uint256);
+    //function convertToAssets(uint256 shares) external view returns (uint256);
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
-    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    //function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
 }
 
 contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
@@ -86,12 +88,12 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         Product[] products;
     }
 
-    event Deposited(address indexed account, uint256 amount, uint256 shares);
+    event Deposited(address indexed account, uint256 amount, uint256 yieldShares, uint256 shares);
     event Withdrawn(address indexed account, uint256 shares);
-    event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
+    event RedemptionsClaimed(address indexed account, uint256 amount, uint256 yieldShares, uint256 shares);
     event ProductsMinted(ProductMint[] products);
     event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, int256 fee, uint256 protocolFee);
-    event FeeCollected(address account, int256 fee, uint256 protocolFee);
+    event FeeCollected(address account, uint256 feeAmount, int256 fee, uint256 protocolFeeAmount, uint256 protocolFee);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor(address scrvUSD_) ERC20("", "") {
@@ -153,16 +155,16 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function deposit(uint256 amount) external nonReentrant {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
-        scrvUSD.deposit(amount, address(this));
+        uint256  scrvusdShares = scrvUSD.deposit(amount, address(this));
         uint256 shares;
         if (totalSupply() == 0) {
-            shares = amount - MINIMUM_SHARES;
+            shares = scrvusdShares - MINIMUM_SHARES;
             _mint(address(0x000000000000000000000000000000000000dEaD), MINIMUM_SHARES);
         } else {
-            shares = amount * totalSupply() / (totalCollateral() - amount);
+            shares = scrvusdShares * totalSupply() / (totalCollateral() - scrvusdShares);
         }
         _mint(_msgSender(), shares);
-        emit Deposited(_msgSender(), amount, shares);
+        emit Deposited(_msgSender(), amount, scrvusdShares, shares);
     }
 
     function withdraw(uint256 shares) external nonReentrant {
@@ -183,16 +185,16 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod + 3 days, "Automator: invalid redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
-        uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
-        require(scrvUSD.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
+        uint256 scrvUSDShares = pendingRedemption * totalCollateral() / totalSupply();
+        require(scrvUSD.balanceOf(address(this)) >= scrvUSDShares, "Automator: insufficient collateral to redeem");
 
         totalPendingRedemptions -= pendingRedemption;
         _redemptions[_msgSender()].pendingRedemption = 0;
 
         _burn(_msgSender(), pendingRedemption);
-        scrvUSD.redeem(amount, _msgSender(), address(this));
+        uint256 amount = scrvUSD.redeem(scrvUSDShares, _msgSender(), address(this));
 
-        emit RedemptionsClaimed(_msgSender(), amount, pendingRedemption);
+        emit RedemptionsClaimed(_msgSender(), amount, scrvUSDShares, pendingRedemption);
     }
 
     function mintProducts(
@@ -203,8 +205,12 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 _totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");
-            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
+            uint256 period = products[i].mintParams.expiry - block.timestamp;
             require(period <= maxPeriod, "Automator: exceed maxPeriod");
+            // approve vaults
+            if (scrvUSD.allowance(address(this), products[i].vault) == 0) {
+                scrvUSD.approve(products[i].vault, type(uint256).max);
+            }
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
                 products[i].mintParams,
@@ -220,9 +226,9 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(IAutomatorFactory(factory).makers(signer), "Automator: invalid maker");
         if (totalFee > 0) {
-            require(scrvUSD.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(scrvUSD.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         } else {
-            require(scrvUSD.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(scrvUSD.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         }
 
         emit ProductsMinted(products);
@@ -269,15 +275,17 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function harvest() external nonReentrant {
         require(totalFee > 0 || totalProtocolFee > 0, "Automator: zero fee");
-        emit FeeCollected(_msgSender(), totalFee, totalProtocolFee);
+        uint256 feeAmount = 0;
+        uint256 protocolFeeAmount = 0;
         if (totalFee > 0) {
-            scrvUSD.redeem(uint256(totalFee), owner(), address(this));
+            feeAmount = scrvUSD.redeem(uint256(totalFee), owner(), address(this));
             totalFee = 0;
         }
         if (totalProtocolFee > 0) {
-            scrvUSD.redeem(totalProtocolFee, IAutomatorFactory(factory).feeCollector(), address(this));
+            protocolFeeAmount = scrvUSD.redeem(totalProtocolFee, IAutomatorFactory(factory).feeCollector(), address(this));
             totalProtocolFee = 0;
         }
+        emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
     }
 
     function name() public view virtual override returns (string memory) {
@@ -314,9 +322,9 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function totalCollateral() public view returns (uint256) {
         if (totalFee > 0) {
-            return scrvUSD.balanceOf(address(this)) + totalPositions - uint256(totalFee);
+            return scrvUSD.balanceOf(address(this)) + totalPositions - uint256(totalFee) - totalProtocolFee;
         } else {
-            return scrvUSD.balanceOf(address(this)) + totalPositions;
+            return scrvUSD.balanceOf(address(this)) + totalPositions - totalProtocolFee;
         }
     }
 
