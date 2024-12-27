@@ -20,6 +20,7 @@ contract ZenRCH is ERC20, ReentrancyGuard {
     ) ERC20("Zen RCH", "zRCH") {
         rch = _rch;
         stRCH = _stRCH;
+        rch.approve(address(stRCH), type(uint256).max);
     }
 
     function mint(uint256 amount) external nonReentrant returns (uint256 shares) {

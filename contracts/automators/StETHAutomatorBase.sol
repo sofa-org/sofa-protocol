@@ -77,12 +77,12 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         Product[] products;
     }
 
-    event Deposited(address indexed account, uint256 amount, uint256 shares);
+    event Deposited(address indexed account, uint256 amount, uint256 yieldShares, uint256 shares);
     event Withdrawn(address indexed account, uint256 shares);
-    event RedemptionsClaimed(address indexed account, uint256 amount, uint256 shares);
+    event RedemptionsClaimed(address indexed account, uint256 amount, uint256 yieldShares, uint256 shares);
     event ProductsMinted(ProductMint[] products);
     event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, int256 fee, uint256 protocolFee);
-    event FeeCollected(address account, int256 fee, uint256 protocolFee);
+    event FeeCollected(address account, uint256 feeAmount, int256 fee, uint256 protocolFeeAmount, uint256 protocolFee);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor() ERC20("", "") {
@@ -150,7 +150,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             shares = amount * totalSupply() / (totalCollateral() - amount);
         }
         _mint(_msgSender(), shares);
-        emit Deposited(_msgSender(), amount, shares);
+        emit Deposited(_msgSender(), amount, amount, shares);
     }
 
     function withdraw(uint256 shares) external nonReentrant {
@@ -171,7 +171,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         require(block.timestamp >= _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod && block.timestamp < _redemptions[_msgSender()].redemptionRequestTimestamp + maxPeriod + 3 days, "Automator: invalid redemption");
 
         uint256 pendingRedemption = _redemptions[_msgSender()].pendingRedemption;
-        uint256 amount = pendingRedemption * getPricePerShare() / 1e18;
+        uint256 amount = pendingRedemption * totalCollateral() / totalSupply();
         require(collateral.balanceOf(address(this)) >= amount, "Automator: insufficient collateral to redeem");
 
         totalPendingRedemptions -= pendingRedemption;
@@ -180,7 +180,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         _burn(_msgSender(), pendingRedemption);
         collateral.safeTransfer(_msgSender(), amount);
 
-        emit RedemptionsClaimed(_msgSender(), amount, pendingRedemption);
+        emit RedemptionsClaimed(_msgSender(), amount, amount, pendingRedemption);
     }
 
     function mintProducts(
@@ -191,8 +191,12 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 _totalPositions;
         for (uint256 i = 0; i < products.length; i++) {
             require(IAutomatorFactory(factory).vaults(products[i].vault), "Automator: invalid vault");
-            uint256 period = (products[i].mintParams.expiry - (((block.timestamp - 28800) / 86400 + 1) * 86400 + 28800)) / 86400;
+            uint256 period = products[i].mintParams.expiry - block.timestamp;
             require(period <= maxPeriod, "Automator: exceed maxPeriod");
+            // approve vaults
+            if (collateral.allowance(address(this), products[i].vault) == 0) {
+                collateral.approve(products[i].vault, type(uint256).max);
+            }
             IVault(products[i].vault).mint(
                 products[i].totalCollateral,
                 products[i].mintParams,
@@ -208,9 +212,9 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         (address signer, ) = signatures.toEthSignedMessageHash().tryRecover(signature);
         require(IAutomatorFactory(factory).makers(signer), "Automator: invalid maker");
         if (totalFee > 0) {
-            require(collateral.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(collateral.balanceOf(address(this)) >= uint256(totalFee) + totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         } else {
-            require(collateral.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * getPricePerShare() / 1e18, "Automator: no enough collateral to redeem");
+            require(collateral.balanceOf(address(this)) >= totalProtocolFee + totalPendingRedemptions * totalCollateral() / totalSupply(), "Automator: no enough collateral to redeem");
         }
 
         emit ProductsMinted(products);
@@ -257,15 +261,19 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function harvest() external nonReentrant {
         require(totalFee > 0 || totalProtocolFee > 0, "Automator: zero fee");
-        emit FeeCollected(_msgSender(), totalFee, totalProtocolFee);
+        uint256 feeAmount = 0;
+        uint256 protocolFeeAmount = 0;
         if (totalFee > 0) {
             collateral.safeTransfer(owner(), uint256(totalFee));
+            feeAmount = uint256(totalFee);
             totalFee = 0;
         }
         if (totalProtocolFee > 0) {
             collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), totalProtocolFee);
+            protocolFeeAmount = totalProtocolFee;
             totalProtocolFee = 0;
         }
+        emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
     }
 
     function name() public view virtual override returns (string memory) {
@@ -302,9 +310,9 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function totalCollateral() public view returns (uint256) {
         if (totalFee > 0) {
-            return collateral.balanceOf(address(this)) + totalPositions - uint256(totalFee);
+            return collateral.balanceOf(address(this)) + totalPositions - uint256(totalFee) - totalProtocolFee;
         } else {
-            return collateral.balanceOf(address(this)) + totalPositions;
+            return collateral.balanceOf(address(this)) + totalPositions - totalProtocolFee;
         }
     }
 

@@ -2,6 +2,8 @@ import { ethers } from "hardhat";
 import { expect } from "chai";
 import { Contract } from "ethers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+//import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+//import { anyValue } from "@nomicfoundation/hardhat-chai-matchers";
 import {
   deployFixture,
 } from "../helpers/helpers";
@@ -76,28 +78,66 @@ describe("AutomatorFactory", function () {
       await expect(automatorFactory.setFeeCollector(ethers.constants.AddressZero))
         .to.be.revertedWith("AutomatorFactory: feeCollector is the zero address");
     });
+
+    it("should add user credits", async function () {
+      const num = 2;
+      await automatorFactory.topUp(addr1.address, num);
+      expect(await automatorFactory.credits(addr1.address)).to.equal(num);
+    });
+
+    it("should emit an event on adding user credits", async function () {
+      const num = 2;
+      await expect(automatorFactory.topUp(addr1.address, num))
+        .to.emit(automatorFactory, "CreditsTopUp")
+        .withArgs(addr1.address, num);
+    });
+
+    it("should revert if user credits not set by the owner", async function () {
+      await expect(automatorFactory.connect(addr1).topUp(addr1.address, 1))
+        .to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
   });
 
   describe("Automator Creation", function () {
     it("should create a new automator", async function () {
       const feeRate = 1000;
-
-      await expect(automatorFactory.createAutomator(feeRate, collateral.address))
-        .to.emit(automatorFactory, "AutomatorCreated")
-        .withArgs(owner.address, collateral.address, await automatorFactory.getAutomator(owner.address, collateral.address), feeRate);
+      const maxPeriod = 5
+      await automatorFactory.topUp(addr1.address, 1);
+      const tx = await automatorFactory.connect(addr1).createAutomator(feeRate, maxPeriod, collateral.address);
+      const receipt = await tx.wait();
+      const args = receipt.events[1].args;
+      //console.log("args:", args);
+      expect(args[0]).to.equal(addr1.address);
+      expect(args[1]).to.equal(collateral.address);
+      expect(args[2]).to.equal(await automatorFactory.getAutomator(addr1.address, collateral.address));
+      expect(args[3]).to.equal(feeRate);
+      expect(args[4]).to.equal(maxPeriod);
+      expect(await automatorFactory.credits(addr1.address)).to.equal(0);
+    });
+    
+    it("should revert if credits == 0", async function () {
+      const feeRate = 1000;
+      const maxPeriod = 5
+      await expect(automatorFactory.connect(addr1).createAutomator(feeRate, maxPeriod, collateral.address))
+        .to.be.revertedWith("AutomatorFactory: insufficient credits");
     });
 
     it("should revert if recreate the same automator", async function () {
       const feeRate = 1000;
-      await automatorFactory.createAutomator(feeRate, collateral.address);
-      await expect(automatorFactory.createAutomator(feeRate, collateral.address))
+      const maxPeriod = 5
+      await automatorFactory.topUp(addr1.address, 2);
+      await automatorFactory.connect(addr1).createAutomator(feeRate, maxPeriod, collateral.address);
+      await expect(automatorFactory.connect(addr1).createAutomator(feeRate, maxPeriod, collateral.address))
         .to.be.revertedWith("ERC1167: create2 failed");
     });
 
     it("should return the correct number of automators", async function () {
-      await automatorFactory.createAutomator(1000, collateral.address);
-      await automatorFactory.connect(addr1).createAutomator(2000, collateral.address);
-
+      const maxPeriod = 5;
+      await automatorFactory.topUp(owner.address, 1);
+      await automatorFactory.topUp(addr1.address, 1);
+      await automatorFactory.createAutomator(1000, maxPeriod, collateral.address);
+      await automatorFactory.connect(addr1).createAutomator(2000, maxPeriod, collateral.address);
       expect(await automatorFactory.automatorsLength()).to.equal(2);
     });
   });
