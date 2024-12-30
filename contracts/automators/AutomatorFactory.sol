@@ -4,8 +4,7 @@ pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./AAVEAutomatorBase.sol";
-import "hardhat/console.sol";
+import "./bases/AAVEAutomatorBase.sol";
 
 contract AutomatorFactory is Ownable {
     address public referral;
