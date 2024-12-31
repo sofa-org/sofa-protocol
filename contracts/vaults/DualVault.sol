@@ -69,7 +69,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         string memory name_,
         string memory symbol_,
         address collateral_,
-        address quoteAsset_
+        address quoteAsset_,
+        address feeCollector_
     ) initializer external {
         name = name_;
         symbol = symbol_;
@@ -86,6 +87,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
                 address(this)
             )
         );
+        feeCollector = feeCollector_;
 
         __Context_init();
         __ERC1155_init("");
@@ -156,7 +158,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         _mintBatch(totalCollaterals, paramsArray, referral);
     }
 
-    function _mintBatch(uint256[] memory totalCollaterals, MintParams[] memory paramsArray, address referral) internal {
+    function _mintBatch(uint256[] calldata totalCollaterals, MintParams[] calldata paramsArray, address referral) internal {
         require(referral != _msgSender(), "Vault: invalid referral");
         uint256[] memory minterProductIds = new uint256[](paramsArray.length);
         for (uint256 i = 0; i < paramsArray.length; i++) {
@@ -188,7 +190,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
             collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
             }
 
-            totalCollaterals[i] = totalCollateral;
+            //totalCollaterals[i] = totalCollateral;
 
             // mint product
             uint256 productId = getProductId(params.expiry, params.anchorPrice, 0);
@@ -202,7 +204,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         _mintBatch(_msgSender(), minterProductIds, totalCollaterals, "");
     }
 
-    function quote(uint256 amount, Product calldata product) external {
+    function quote(uint256 amount, Product calldata product) external nonReentrant {
         require(block.timestamp < product.expiry + 2 hours, "Vault: expired");
         uint256 productId = getProductId(product.expiry, product.anchorPrice, 1);
         require(balanceOf(_msgSender(), productId) >= amount, "Vault: insufficient balance");
@@ -261,8 +263,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 makerPosition = quotePositions[getProductId(expiry, anchorPrice, 1)];
         collateralPayoff = amount - amount * makerPosition / totalPosition;
         quoteAssetPayoff = (amount - collateralPayoff) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
-        fee = collateralPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
-        quoteFee = quoteAssetPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+        fee = collateralPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
+        quoteFee = quoteAssetPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         collateralPayoff -= fee;
         quoteAssetPayoff -= quoteFee;
 
@@ -312,8 +314,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
         collateralPayoff = amount - (amount * makerPosition / totalPosition);
         quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
-        fee = collateralPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
-        quoteFee = quoteAssetPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e18;
+        fee = collateralPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
+        quoteFee = quoteAssetPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         collateralPayoff -= fee;
         quoteAssetPayoff -= quoteFee;
     }
