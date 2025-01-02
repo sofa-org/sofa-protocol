@@ -58,7 +58,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
     mapping(uint256 => uint256) public totalPositions;
 
     // Events
-    event Minted(address minter, address maker, address referral, uint256 totalCollateral, uint256 expiry, uint256 anchorPrice, uint256 makerCollateral);
+    event Minted(address minter, address maker, address referral, uint256 totalCollateral, uint256 expiry, uint256 anchorPrice, uint256 makerCollateral, uint256 premiumPercentage);
     event Quoted(address operator, uint256 productId, uint256 amount, uint256 quoteAmount);
     event Burned(address operator, uint256 productId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee);
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs, uint256[] fees, uint256[] quoteFees);
@@ -134,13 +134,14 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         }
         // mint product
         uint256 productId = getProductId(params.expiry, params.anchorPrice, 0);
-        uint256 minterProductId = getMinterProductId(params.expiry, params.anchorPrice, params.makerCollateral * 1e18 / totalCollateral);
+        uint256 premiumPercentage = params.makerCollateral * 1e18 / totalCollateral;
+        uint256 minterProductId = getMinterProductId(params.expiry, params.anchorPrice, premiumPercentage);
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, 1);
         _mint(_msgSender(), minterProductId, totalCollateral, "");
         _mint(params.maker, makerProductId, totalCollateral, "");
         totalPositions[productId] += totalCollateral;
 
-        emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral);
+        emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral, premiumPercentage);
     }
 
     function mintBatch(
@@ -194,12 +195,13 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
 
             // mint product
             uint256 productId = getProductId(params.expiry, params.anchorPrice, 0);
-            minterProductIds[i] = getMinterProductId(params.expiry, params.anchorPrice, params.makerCollateral * 1e18 / totalCollateral);
+            uint256 premiumPercentage = params.makerCollateral * 1e18 / totalCollateral;
+            minterProductIds[i] = getMinterProductId(params.expiry, params.anchorPrice, premiumPercentage);
             uint256 makerProductId = getProductId(params.expiry, params.anchorPrice, 1);
             _mint(params.maker, makerProductId, totalCollateral, "");
             totalPositions[productId] += totalCollateral;
 
-            emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral);
+            emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrice, params.makerCollateral, premiumPercentage);
         }
         _mintBatch(_msgSender(), minterProductIds, totalCollaterals, "");
     }
