@@ -445,60 +445,6 @@ describe("DualTrendVault", function () {
     });
   });
 
-
-
-  describe("application", function () {
-    let expiry, anchorPrice, userA, userB, premiumPercentage;
-    beforeEach(async function () {
-      const totalCollateral = parseEther("100");
-      const totalCollateralB = parseEther("99");
-      expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
-      anchorPrice = parseEther("0.01").div(1e10);
-      const makerCollateral = parseEther("10");
-      premiumPercentage = makerCollateral.mul(parseEther("1")).div(totalCollateral);
-      const deadline = await time.latest() + 600;
-      userA = minter;
-      userB = maker;
-      await mint(totalCollateral, expiry, anchorPrice, makerCollateral, deadline, collateral, vault, userA, maker, referral, eip721Domain);//quote all
-      await mint(totalCollateral, expiry, anchorPrice, makerCollateral, deadline, collateral, vault, userB, maker, referral, eip721Domain);//quote half
-      const amount = totalCollateral;
-      await vault.connect(maker).quoteBatch(
-        [amount], //half of the totalPositions
-        [
-          {expiry: expiry, anchorPrice: anchorPrice}
-        ]
-      );
-    });
-
-    it("two users with the same product ID", async function () {
-      await time.increaseTo(expiry + 2 * 3600);
-      const fee = parseEther("100").div(10).div(100).div(2);  //premiumPercentage 10%, feerate: 1%
-      const quoteFee = parseEther("1").div(10).div(100).div(2);
-      await expect(vault.connect(userA).burn(expiry, anchorPrice, premiumPercentage))
-        .to.changeTokenBalances(collateral, [userA, vault], [parseEther("50").sub(fee), parseEther("50").sub(fee).mul(-1)]);
-      expect(await weth.balanceOf(userA.address)).to.equal(parseEther("100000.5").sub(quoteFee));
-      await expect(vault.connect(userB).burn(expiry, anchorPrice, premiumPercentage))
-        .to.changeTokenBalances(collateral, [userB, vault], [parseEther("50").sub(fee), parseEther("50").sub(fee).mul(-1)]);
-      expect(await weth.balanceOf(userB.address)).to.equal(parseEther("99999.5").sub(quoteFee));
-    });
-    it("balances after burn", async function () {
-      await time.increaseTo(expiry + 2 * 3600);
-      await vault.connect(userA).burn(expiry, anchorPrice, premiumPercentage);
-      await vault.connect(userB).burn(expiry, anchorPrice, premiumPercentage);
-      //1155
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, premiumPercentage]);
-      const makerProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 1]);
-      const productId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 0]);
-      expect(await vault.balanceOf(userA.address, minterProductId)).to.equal(0);
-      expect(await vault.balanceOf(userB.address, minterProductId)).to.equal(0);
-      expect(await vault.balanceOf(userA.address, makerProductId)).to.equal(0);
-      expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("100"));
-      //status variables
-      expect(await vault.totalPositions(productId)).to.equal(parseEther("200"));
-      expect(await vault.quotePositions(makerProductId)).to.equal(parseEther("100"));
-    });
-  });
-
   describe("Harvest", function () {
     let expiry, anchorPriceA, anchorPriceB, anchorPriceC, premiumPercentage;
     beforeEach(async function () {
@@ -562,6 +508,92 @@ describe("DualTrendVault", function () {
       const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage]);
       await expect(vault.connect(minter).harvest())
         .to.be.revertedWith("Vault: zero fee");
+    });
+  });
+
+  describe("Application", function () {
+    let expiry, anchorPrice, userA, userB, premiumPercentage;
+    beforeEach(async function () {
+      const totalCollateral = parseEther("100");
+      expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
+      anchorPrice = parseEther("0.01").div(1e10);
+      const makerCollateral = parseEther("10");
+      premiumPercentage = makerCollateral.mul(parseEther("1")).div(totalCollateral);
+      const deadline = await time.latest() + 600;
+      userA = minter;
+      userB = maker;
+      await mint(totalCollateral, expiry, anchorPrice, makerCollateral, deadline, collateral, vault, userA, maker, referral, eip721Domain);
+      await mint(totalCollateral, expiry, anchorPrice, makerCollateral, deadline, collateral, vault, userB, maker, referral, eip721Domain);
+      const amount = totalCollateral;
+      await vault.connect(maker).quoteBatch(
+        [amount], //half of the totalPositions
+        [
+          {expiry: expiry, anchorPrice: anchorPrice}
+        ]
+      );
+    });
+
+    it("two users with the same product ID", async function () {
+      await time.increaseTo(expiry + 2 * 3600);
+      const fee = parseEther("100").div(10).div(100).div(2);  //premiumPercentage 10%, feerate: 1%
+      const quoteFee = parseEther("1").div(10).div(100).div(2);
+      await expect(vault.connect(userA).burn(expiry, anchorPrice, premiumPercentage))
+        .to.changeTokenBalances(collateral, [userA, vault], [parseEther("50").sub(fee), parseEther("50").sub(fee).mul(-1)]);
+      expect(await weth.balanceOf(userA.address)).to.equal(parseEther("100000.5").sub(quoteFee));
+      await expect(vault.connect(userB).burn(expiry, anchorPrice, premiumPercentage))
+        .to.changeTokenBalances(collateral, [userB, vault], [parseEther("50").sub(fee), parseEther("50").sub(fee).mul(-1)]);
+      expect(await weth.balanceOf(userB.address)).to.equal(parseEther("99999.5").sub(quoteFee));
+    });
+    it("balances after burn", async function () {
+      await time.increaseTo(expiry + 2 * 3600);
+      await vault.connect(userA).burn(expiry, anchorPrice, premiumPercentage);
+      await vault.connect(userB).burn(expiry, anchorPrice, premiumPercentage);
+      //1155
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, premiumPercentage]);
+      const makerProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 1]);
+      const productId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 0]);
+      expect(await vault.balanceOf(userA.address, minterProductId)).to.equal(0);
+      expect(await vault.balanceOf(userB.address, minterProductId)).to.equal(0);
+      expect(await vault.balanceOf(userA.address, makerProductId)).to.equal(0);
+      expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("100"));
+      //status variables
+      expect(await vault.totalPositions(productId)).to.equal(parseEther("200"));
+      expect(await vault.quotePositions(makerProductId)).to.equal(parseEther("100"));
+    });
+  });
+
+  describe("Issue", function () {
+    let expiry, expiryB, anchorPrice, userA, userB, premiumPercentageB;
+    beforeEach(async function () {
+      const totalCollateralB = parseEther("99");
+      expiryB = Math.ceil(await time.latest() / 86400) * 86400 * 2 + 28800;
+      anchorPrice = parseEther("0.01").div(1e10);
+      const makerCollateral = parseEther("10");
+      premiumPercentageB = makerCollateral.mul(parseEther("1")).div(totalCollateralB);
+      const deadline = await time.latest() + 600;
+      userA = minter;
+      userB = maker;
+      await mint(totalCollateralB, expiryB, anchorPrice, makerCollateral, deadline, collateral, vault, userA, maker, referral, eip721Domain);
+    });
+
+    it("decimals precision", async function () {
+      const quoteAmount = parseEther("20");
+      const transferAmount = parseEther("10");
+      const check1 = parseEther("70.948464442403836345");
+      const check2 = parseEther("7.971737577798183859");
+      const fee = parseEther("0.079797979797979797");
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiryB, anchorPrice, premiumPercentageB]);
+      await vault.connect(maker).quote(quoteAmount, {expiry: expiryB, anchorPrice: anchorPrice});
+      await vault.connect(userA).safeTransferFrom(userA.address, userB.address, minterProductId, transferAmount, '0x01');
+      await time.increaseTo(expiryB + 2 * 3600);
+      await expect(vault.connect(userA).burn(expiryB, anchorPrice, premiumPercentageB))
+        .to.changeTokenBalances(collateral, [userA, vault], [check1, check1.mul(-1)]);
+      await expect(vault.connect(userB).burn(expiryB, anchorPrice, premiumPercentageB))
+        .to.changeTokenBalances(collateral, [userB, vault], [check2, check2.mul(-1)]);
+      console.log("vault balance:", await collateral.balanceOf(vault.address));
+      console.log("totalFee:", await vault.totalFee());
+      //await expect(vault.connect(minter).harvest())
+      //  .to.changeTokenBalances(collateral, [feeCollector, vault], [fee, fee.mul(-1)]);
     });
   });
 
