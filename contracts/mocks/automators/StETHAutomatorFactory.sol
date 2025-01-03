@@ -42,6 +42,7 @@ contract StETHAutomatorFactory is Ownable {
         bytes32 salt = keccak256(abi.encodePacked(_msgSender(), collateral));
         address _automator = Clones.cloneDeterministic(automator, salt);
         StETHAutomatorBase(_automator).initialize(_msgSender(), collateral, feeRate, maxPeriod);
+        require(getAutomator[_msgSender()][collateral] == address(0), "AutomatorFactory: automator already exists");
         getAutomator[_msgSender()][collateral] = _automator;
         automators.push(_automator);
         emit AutomatorCreated(_msgSender(), collateral, _automator, feeRate, maxPeriod);

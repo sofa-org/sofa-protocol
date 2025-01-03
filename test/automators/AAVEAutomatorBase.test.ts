@@ -92,7 +92,7 @@ describe("AutomatorBase", function () {
     it("Should initialize with correct parameters", async function () {
       expect(await automatorBase.collateral()).to.equal(collateral.address);
       expect(await automatorBase.name()).to.equal("Automator " + (await collateral.name()));
-      expect(await automatorBase.symbol()).to.equal("at" + (await collateral.symbol()));
+      expect(await automatorBase.symbol()).to.equal("at" + (await collateral.symbol()) + "_" + ethers.BigNumber.from(automatorBase.address).mod(65536).toString());
       expect(await automatorBase.pool()).to.equal(aavePool.address);
     });
     it("Should revert if not initialized by factory", async function () {

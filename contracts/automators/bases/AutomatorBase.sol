@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "../../interfaces/IFeeCollector.sol";
 
 struct Product {
@@ -45,6 +46,7 @@ interface IAutomatorFactory {
 contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
+    using Strings for uint256;
 
     address private _owner;
     IERC20 public collateral;
@@ -52,6 +54,7 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     uint256 public maxPeriod;
     address public immutable factory;
     uint256 public constant MINIMUM_SHARES = 10**3;
+    string private symbol_;
 
     int256 public totalFee;
     uint256 public totalProtocolFee;
@@ -138,6 +141,8 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
         maxPeriod = maxPeriod_;
+        uint256 salt = uint256(uint160(address(this))) % 65536;
+        symbol_ = string(abi.encodePacked("at", IERC20Metadata(address(collateral)).symbol(), "_", salt.toString()));
     }
 
     function deposit(uint256 amount) external nonReentrant {
@@ -281,7 +286,7 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function symbol() public view virtual override returns (string memory) {
-        return string(abi.encodePacked("at", IERC20Metadata(address(collateral)).symbol()));
+        return symbol_;
     }
 
     function decimals() public view virtual override returns (uint8) {
