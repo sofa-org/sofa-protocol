@@ -62,6 +62,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
     event Quoted(address operator, uint256 productId, uint256 amount, uint256 quoteAmount);
     event Burned(address operator, uint256 productId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff, uint256 fee, uint256 quoteFee);
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs, uint256[] fees, uint256[] quoteFees);
+    event FeeCollected(address feeCollector, uint256 fee, uint256 quoteFee);
 
     receive() external payable {}
 
@@ -334,7 +335,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
             totalQuoteFee = 0;
             quoteAsset.safeTransfer(feeCollector, quoteFee);
         }
-
+        emit FeeCollected(feeCollector, fee, quoteFee);
     }
     // get product id by parameters
     function getProductId(uint256 expiry, uint256 anchorPrice, uint256 isMaker) public pure returns (uint256) {
