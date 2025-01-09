@@ -54,7 +54,8 @@ const config: HardhatUserConfig = {
       forking: {
         enabled: true,
         url: process.env.MAINNET_RPC_URL as string,
-        blockNumber: 20516000,
+        //blockNumber: 20516000,   //for stETH related test
+        blockNumber: 21152000, //for ScrvUSD related test and other tests
       },
       chainId: 1,
     },
@@ -72,6 +73,11 @@ const config: HardhatUserConfig = {
       url: process.env.BSC_URL || "",
       accounts:
         process.env.PRIVATE_KEY_BSC !== undefined ? [process.env.PRIVATE_KEY_BSC] : [],
+    },
+    polygon: {
+      url: process.env.POLYGON_RPC_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY_POLYGON !== undefined ? [process.env.PRIVATE_KEY_POLYGON] : [],
     },
     sepolia: {
       url: process.env.SEPOLIA_URL || "",
@@ -109,6 +115,7 @@ const config: HardhatUserConfig = {
       arbitrumOne: process.env.ARBITRUMSCAN_API_KEY,
       polygonMumbai: process.env.POLYGONSCAN_API_KEY,
       bsc: process.env.BSCSCAN_API_KEY,
+      polygon: process.env.POLYGONSCAN_API_KEY,
     },
   },
   abiExporter: {
