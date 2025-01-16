@@ -281,6 +281,13 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
     }
 
+    function harvestByProtocol() external nonReentrant {
+        require(totalProtocolFee > 0, "Automator: zero protocol fee");
+        collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), totalProtocolFee);
+        emit FeeCollected(IAutomatorFactory(factory).feeCollector(), 0, 0, totalProtocolFee, totalProtocolFee);
+        totalProtocolFee = 0;
+    }
+
     function name() public view virtual override returns (string memory) {
         return string(abi.encodePacked("Automator ", IERC20Metadata(address(collateral)).name()));
     }

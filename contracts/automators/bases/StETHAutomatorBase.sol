@@ -54,6 +54,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     uint256 public maxPeriod;
     address public immutable factory;
     uint256 public constant MINIMUM_SHARES = 10**3;
+    address public constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     string private symbol_;
 
     int256 public totalFee;
@@ -137,6 +138,7 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 maxPeriod_
     ) external {
         require(_msgSender() == factory, "Automator: forbidden");
+        require(STETH == collateral_, "Automator: invalid collateral");
         _owner = owner_;
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
@@ -279,6 +281,13 @@ contract StETHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             totalProtocolFee = 0;
         }
         emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+    }
+
+    function harvestByProtocol() external nonReentrant {
+        require(totalProtocolFee > 0, "Automator: zero protocol fee");
+        collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), totalProtocolFee);
+        emit FeeCollected(IAutomatorFactory(factory).feeCollector(), 0, 0, totalProtocolFee, totalProtocolFee);
+        totalProtocolFee = 0;
     }
 
     function name() public view virtual override returns (string memory) {

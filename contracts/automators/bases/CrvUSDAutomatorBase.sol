@@ -65,6 +65,7 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     address public immutable factory;
     IScrvUSD public immutable scrvUSD;
     uint256 public constant MINIMUM_SHARES = 10**3;
+    address public constant CRVUSD = 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E;
     string private symbol_;
 
     int256 public totalFee;
@@ -149,6 +150,7 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 maxPeriod_
     ) external {
         require(_msgSender() == factory, "Automator: forbidden");
+        require(CRVUSD == collateral_, "Automator: invalid collateral");
         _owner = owner_;
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
@@ -160,7 +162,7 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
 
     function deposit(uint256 amount) external nonReentrant {
         collateral.safeTransferFrom(_msgSender(), address(this), amount);
-        uint256  scrvusdShares = scrvUSD.deposit(amount, address(this));
+        uint256 scrvusdShares = scrvUSD.deposit(amount, address(this));
         uint256 shares;
         if (totalSupply() == 0) {
             shares = scrvusdShares - MINIMUM_SHARES;
@@ -291,6 +293,13 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             totalProtocolFee = 0;
         }
         emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+    }
+
+    function harvestByProtocol() external nonReentrant {
+        require(totalProtocolFee > 0, "Automator: zero protocol fee");
+        uint256 protocolFeeAmount = scrvUSD.redeem(totalProtocolFee, IAutomatorFactory(factory).feeCollector(), address(this));
+        emit FeeCollected(_msgSender(), 0, 0, protocolFeeAmount, totalProtocolFee);
+        totalProtocolFee = 0;
     }
 
     function name() public view virtual override returns (string memory) {

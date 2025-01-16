@@ -64,6 +64,7 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     address public immutable factory;
     IZenRCH immutable zenRCH;
     uint256 public constant MINIMUM_SHARES = 10**3;
+    address public constant RCH = 0x57B96D4aF698605563A4653D882635da59Bf11AF;
     string private symbol_;
 
     int256 public totalFee;
@@ -148,6 +149,7 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         uint256 maxPeriod_
     ) external {
         require(_msgSender() == factory, "Automator: forbidden");
+        require(RCH == collateral_, "Automator: invalid collateral");
         _owner = owner_;
         collateral = IERC20(collateral_);
         feeRate = feeRate_;
@@ -290,6 +292,14 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             totalProtocolFee = 0;
         }
         emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+    }
+
+    function harvestByProtocol() external nonReentrant {
+        require(totalProtocolFee > 0, "Automator: zero protocol fee");
+        uint256 protocolFeeAmount = zenRCH.withdraw(IAutomatorFactory(factory).feeCollector(), totalProtocolFee);
+        totalProtocolFee = 0;
+
+        emit FeeCollected(IAutomatorFactory(factory).feeCollector(), 0, 0, protocolFeeAmount, totalProtocolFee);
     }
 
     function name() public view virtual override returns (string memory) {

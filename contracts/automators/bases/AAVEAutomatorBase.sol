@@ -152,6 +152,7 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
         feeRate = feeRate_;
         maxPeriod = maxPeriod_;
         aToken = IAToken(pool.getReserveData(collateral_).aTokenAddress);
+        require(address(aToken) != address(0), "Automator: invalid aToken");
         collateral.safeApprove(address(pool), type(uint256).max);
         uint256 salt = uint256(uint160(address(this))) % 65536;
         symbol_ = string(abi.encodePacked("at", IERC20Metadata(address(collateral)).symbol(), "_", salt.toString()));
@@ -291,6 +292,13 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
             totalProtocolFee = 0;
         }
         emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+    }
+
+    function harvestByProtocol() external nonReentrant {
+        require(totalProtocolFee > 0, "Automator: zero protocol fee");
+        uint256 protocolFeeAmount = pool.withdraw(address(collateral), totalProtocolFee, IAutomatorFactory(factory).feeCollector());
+        emit FeeCollected(_msgSender(), 0, 0, protocolFeeAmount, totalProtocolFee);
+        totalProtocolFee = 0;
     }
 
     function name() public view virtual override returns (string memory) {
