@@ -38,6 +38,8 @@ contract StETHAutomatorFactory is Ownable {
         address collateral
     ) external returns (address) {
         require(credits[_msgSender()] > 0, "AutomatorFactory: insufficient credits");
+        require(feeRate <= 0.15 ether, "AutomatorFactory: feeRate too high");
+        require(maxPeriod <= 30 days, "AutomatorFactory: maxPeriod too high");
         credits[_msgSender()] -= 1;
         bytes32 salt = keccak256(abi.encodePacked(_msgSender(), collateral));
         address _automator = Clones.cloneDeterministic(automator, salt);
