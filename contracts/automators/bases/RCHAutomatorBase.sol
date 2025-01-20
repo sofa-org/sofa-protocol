@@ -95,7 +95,7 @@ contract RCHAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     event Withdrawn(address indexed account, uint256 shares);
     event RedemptionsClaimed(address indexed account, uint256 amount, uint256 yieldShares, uint256 shares);
     event ProductsMinted(ProductMint[] products);
-    event ProductsBurned(ProductBurn[] products, uint256 accCollateralPerShare, int256 fee, uint256 protocolFee);
+    event ProductsBurned(ProductBurn[] products, uint256 totalCollateral, int256 fee, uint256 protocolFee);
     event FeeCollected(address account, uint256 feeAmount, int256 fee, uint256 protocolFeeAmount, uint256 protocolFee);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
