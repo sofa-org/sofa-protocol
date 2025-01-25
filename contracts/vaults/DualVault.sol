@@ -97,7 +97,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 totalCollateral,
         MintParams calldata params,
         address referral
-    ) external {
+    ) external nonReentrant {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
         collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
@@ -147,7 +147,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256[] calldata totalCollaterals,
         MintParams[] calldata paramsArray,
         address referral
-    ) external {
+    ) external nonReentrant {
         require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
         // transfer collateral
         uint256 depositAmount;
@@ -321,7 +321,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         quoteAssetPayoff -= quoteFee;
     }
 
-    function harvest() external {
+    function harvest() external nonReentrant {
         uint256 fee = totalFee;
         uint256 quoteFee = totalQuoteFee;
         require(fee > 0 || quoteFee > 0, "Vault: zero fee");

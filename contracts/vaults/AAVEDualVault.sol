@@ -105,7 +105,7 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
         uint256 totalCollateral,
         MintParams calldata params,
         address referral
-    ) external {
+    ) external nonReentrant {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
         collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
@@ -157,7 +157,7 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
         uint256[] calldata totalCollaterals,
         MintParams[] calldata paramsArray,
         address referral
-    ) external {
+    ) external nonReentrant {
         require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
         // transfer collateral
         uint256 depositAmount;
@@ -322,7 +322,7 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
         quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
     }
 
-    function harvest() external {
+    function harvest() external nonReentrant {
         uint256 fee = aToken.balanceOf(address(this)) - totalDeposit;
         require(fee > 0, "Vault: zero fee");
         require(pool.withdraw(address(collateral), fee, feeCollector) > 0, "Vault: withdraw failed");

@@ -106,7 +106,7 @@ contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         uint256 totalCollateral,
         MintParams calldata params,
         address referral
-    ) external {
+    ) external nonReentrant {
         // transfer collateral
         uint256 depositAmount = totalCollateral - params.makerCollateral;
         collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
@@ -158,7 +158,7 @@ contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         uint256[] calldata totalCollaterals,
         MintParams[] calldata paramsArray,
         address referral
-    ) external {
+    ) external nonReentrant {
         require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
         // transfer collateral
         uint256 depositAmount;
@@ -324,7 +324,7 @@ contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
         quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
     }
 
-    function harvest() external {
+    function harvest() external nonReentrant {
         uint256 fee = scrvUSD.balanceOf(address(this)) - totalDeposit;
         require(fee > 0, "Vault: zero fee");
         scrvUSD.withdraw(fee, feeCollector, address(this));
