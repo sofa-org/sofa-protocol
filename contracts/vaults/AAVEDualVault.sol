@@ -68,8 +68,6 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs);
     event FeeCollected(address feeCollector, uint256 fee);
 
-    receive() external payable {}
-
     function initialize(
         string memory name_,
         string memory symbol_,

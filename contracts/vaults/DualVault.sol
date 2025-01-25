@@ -64,8 +64,6 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
     event BatchBurned(address operator, uint256[] productIds, uint256[] amounts, uint256[] collateralPayoffs, uint256[] quoteAssetPayoffs, uint256[] fees, uint256[] quoteFees);
     event FeeCollected(address feeCollector, uint256 fee, uint256 quoteFee);
 
-    receive() external payable {}
-
     function initialize(
         string memory name_,
         string memory symbol_,
