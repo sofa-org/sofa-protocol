@@ -158,10 +158,11 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
         MintParams[] calldata paramsArray,
         address referral
     ) external nonReentrant {
-        require(totalCollaterals.length == paramsArray.length, "Vault: invalid params length");
+        uint256 len = paramsArray.length;
+        require(totalCollaterals.length == len, "Vault: invalid params length");
         // transfer collateral
         uint256 depositAmount;
-        for (uint256 i = 0; i < paramsArray.length; i++) {
+        for (uint256 i; i < len; i++) {
             depositAmount += totalCollaterals[i] - paramsArray[i].makerCollateral;
         }
         collateral.safeTransferFrom(_msgSender(), address(this), depositAmount);
@@ -172,7 +173,7 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
         require(referral != _msgSender(), "Vault: invalid referral");
         uint256 totalCollateral;
         uint256[] memory minterProductIds = new uint256[](paramsArray.length);
-        for (uint256 i = 0; i < paramsArray.length; i++) {
+        for (uint256 i; i < paramsArray.length; i++) {
             MintParams memory params = paramsArray[i];
             require(block.timestamp < params.deadline, "Vault: deadline");
             require(block.timestamp < params.expiry, "Vault: expired");
@@ -231,11 +232,12 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
     }
 
     function quoteBatch(uint256[] calldata amounts, Product[] calldata products) external nonReentrant {
-        require(amounts.length == products.length, "Vault: invalid length");
+        uint256 len = products.length;
+        require(amounts.length == len, "Vault: invalid length");
         uint256 totalQuoteAmount;
         uint256 totalCollateralAmount;
-        uint256[] memory productIds = new uint256[](products.length);
-        for (uint256 i = 0; i < products.length; i++) {
+        uint256[] memory productIds = new uint256[](len);
+        for (uint256 i; i < len; i++) {
             Product calldata product = products[i];
             require(block.timestamp < product.expiry + 2 hours, "Vault: expired");
             uint256 productId = getProductId(product.expiry, product.anchorPrice, 1);
@@ -297,9 +299,10 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
     }
 
     function _burnBatch(MinterProduct[] calldata products) internal nonReentrant returns (uint256 totalCollateralPayoff, uint256 totalQuoteAssetPayoff) {
-        uint256[] memory minterProductIds = new uint256[](products.length);
-        uint256[] memory amounts = new uint256[](products.length);
-        for (uint256 i = 0; i < products.length; i++) {
+        uint256 len = products.length;
+        uint256[] memory minterProductIds = new uint256[](len);
+        uint256[] memory amounts = new uint256[](len);
+        for (uint256 i; i < len; i++) {
             (uint256 minterProductId, uint256 amount, uint256 collateralPayoff, uint256 quoteAssetPayoff) = _processProduct(products[i]);
             minterProductIds[i] = minterProductId;
             amounts[i] = amount;
