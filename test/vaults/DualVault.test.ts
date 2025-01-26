@@ -579,8 +579,8 @@ describe("DualTrendVault", function () {
     it("decimals precision", async function () {
       const quoteAmount = parseEther("20");
       const transferAmount = parseEther("10");
-      const check1 = parseEther("70.948464442403836345");
-      const check2 = parseEther("7.971737577798183859");
+      const check1 = parseEther("70.948464442403836344");
+      const check2 = parseEther("7.971737577798183858");
       const fee = parseEther("0.079797979797979797");
       const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiryB, anchorPrice, premiumPercentageB]);
       await vault.connect(maker).quote(quoteAmount, {expiry: expiryB, anchorPrice: anchorPrice});

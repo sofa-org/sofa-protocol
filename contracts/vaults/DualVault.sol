@@ -9,10 +9,12 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "../utils/SignatureBitMap.sol";
 import "../interfaces/IFeeCollector.sol";
 
 contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
+    using Math for uint256;
     using SafeERC20 for IERC20Metadata;
     using SignatureCheckerUpgradeable for address;
 
@@ -264,8 +266,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
 
         uint256 totalPosition = totalPositions[productId];
         uint256 makerPosition = quotePositions[getProductId(expiry, anchorPrice, 1)];
-        collateralPayoff = amount - amount * makerPosition / totalPosition;
-        quoteAssetPayoff = (amount - collateralPayoff) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        collateralPayoff = amount - amount.mulDiv(makerPosition, totalPosition, Math.Rounding.Up);
+        quoteAssetPayoff = (amount * makerPosition / totalPosition) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
         fee = collateralPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         quoteFee = quoteAssetPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         collateralPayoff -= fee;
@@ -315,8 +317,8 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         require(block.timestamp >= product.expiry + 2 hours, "Vault: not expired");
         uint256 totalPosition = totalPositions[getProductId(product.expiry, product.anchorPrice, 0)];
         uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
-        collateralPayoff = amount - (amount * makerPosition / totalPosition);
-        quoteAssetPayoff = (amount - collateralPayoff) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        collateralPayoff = amount - amount.mulDiv(makerPosition, totalPosition, Math.Rounding.Up);
+        quoteAssetPayoff = (amount * makerPosition / totalPosition) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
         fee = collateralPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         quoteFee = quoteAssetPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         collateralPayoff -= fee;
