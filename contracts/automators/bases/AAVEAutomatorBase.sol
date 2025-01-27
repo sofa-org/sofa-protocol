@@ -280,18 +280,25 @@ contract AAVEAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function harvest() external nonReentrant {
-        require(totalFee > 0 || totalProtocolFee > 0, "Automator: zero fee");
-        uint256 feeAmount = 0;
-        uint256 protocolFeeAmount = 0;
-        if (totalFee > 0) {
-            feeAmount = pool.withdraw(address(collateral), uint256(totalFee), owner());
+        int256 totalFeeCached = totalFee;
+        uint256 totalProtocolFeeCached = totalProtocolFee;
+
+        require(totalFeeCached > 0 || totalProtocolFeeCached > 0, "Automator: zero fee");
+
+        uint256 feeAmount;
+        uint256 protocolFeeAmount;
+
+        if (totalFeeCached > 0) {
+            feeAmount = pool.withdraw(address(collateral), uint256(totalFeeCached), owner());
             totalFee = 0;
         }
-        if (totalProtocolFee > 0) {
-            protocolFeeAmount = pool.withdraw(address(collateral), totalProtocolFee, IAutomatorFactory(factory).feeCollector());
+
+        if (totalProtocolFeeCached > 0) {
+            protocolFeeAmount = pool.withdraw(address(collateral), totalProtocolFeeCached, IAutomatorFactory(factory).feeCollector());
             totalProtocolFee = 0;
         }
-        emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+
+        emit FeeCollected(_msgSender(), feeAmount, totalFeeCached, protocolFeeAmount, totalProtocolFeeCached);
     }
 
     function harvestByProtocol() external nonReentrant {

@@ -265,20 +265,27 @@ contract AutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function harvest() external nonReentrant {
-        require(totalFee > 0 || totalProtocolFee > 0, "Automator: zero fee");
-        uint256 feeAmount = 0;
-        uint256 protocolFeeAmount = 0;
-        if (totalFee > 0) {
-            collateral.safeTransfer(owner(), uint256(totalFee));
-            feeAmount = uint256(totalFee);
+        int256 totalFeeCached = totalFee;
+        uint256 totalProtocolFeeCached = totalProtocolFee;
+
+        require(totalFeeCached > 0 || totalProtocolFeeCached > 0, "Automator: zero fee");
+
+        uint256 feeAmount;
+        uint256 protocolFeeAmount;
+
+        if (totalFeeCached > 0) {
+            collateral.safeTransfer(owner(), uint256(totalFeeCached));
+            feeAmount = uint256(totalFeeCached);
             totalFee = 0;
         }
-        if (totalProtocolFee > 0) {
-            collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), totalProtocolFee);
-            protocolFeeAmount = totalProtocolFee;
+
+        if (totalProtocolFeeCached > 0) {
+            collateral.safeTransfer(IAutomatorFactory(factory).feeCollector(), totalProtocolFeeCached);
+            protocolFeeAmount = totalProtocolFeeCached;
             totalProtocolFee = 0;
         }
-        emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+
+        emit FeeCollected(_msgSender(), feeAmount, totalFeeCached, protocolFeeAmount, totalProtocolFeeCached);
     }
 
     function harvestByProtocol() external nonReentrant {

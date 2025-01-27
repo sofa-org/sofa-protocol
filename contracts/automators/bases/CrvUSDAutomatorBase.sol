@@ -281,18 +281,25 @@ contract CrvUSDAutomatorBase is ERC1155Holder, ERC20, ReentrancyGuard {
     }
 
     function harvest() external nonReentrant {
-        require(totalFee > 0 || totalProtocolFee > 0, "Automator: zero fee");
-        uint256 feeAmount = 0;
-        uint256 protocolFeeAmount = 0;
-        if (totalFee > 0) {
-            feeAmount = scrvUSD.redeem(uint256(totalFee), owner(), address(this));
+        int256 totalFeeCached = totalFee;
+        uint256 totalProtocolFeeCached = totalProtocolFee;
+
+        require(totalFeeCached > 0 || totalProtocolFeeCached > 0, "Automator: zero fee");
+
+        uint256 feeAmount;
+        uint256 protocolFeeAmount;
+
+        if (totalFeeCached > 0) {
+            feeAmount = scrvUSD.redeem(uint256(totalFeeCached), owner(), address(this));
             totalFee = 0;
         }
-        if (totalProtocolFee > 0) {
-            protocolFeeAmount = scrvUSD.redeem(totalProtocolFee, IAutomatorFactory(factory).feeCollector(), address(this));
+
+        if (totalProtocolFeeCached > 0) {
+            protocolFeeAmount = scrvUSD.redeem(totalProtocolFeeCached, IAutomatorFactory(factory).feeCollector(), address(this));
             totalProtocolFee = 0;
         }
-        emit FeeCollected(_msgSender(), feeAmount, totalFee, protocolFeeAmount, totalProtocolFee);
+
+        emit FeeCollected(_msgSender(), feeAmount, totalFeeCached, protocolFeeAmount, totalProtocolFeeCached);
     }
 
     function harvestByProtocol() external nonReentrant {
