@@ -69,8 +69,8 @@ describe("DualTrendVault", function () {
       await expect(mint(totalCollateral, expiry, anchorPrice, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain))
         .to.be.revertedWith("Vault: signature consumed");
       // Perform assertions
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], 
-        [expiry, anchorPrice, makerCollateral.mul(parseEther("1")).div(totalCollateral)]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"],
+        [expiry, anchorPrice, makerCollateral.mul(parseEther("1")).div(totalCollateral), 0]);
       const makerProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 1]);
       const productId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 0]);
       expect(await vault.balanceOf(minter.address, minterProductId)).to.equal(parseEther("100"));
@@ -140,8 +140,8 @@ describe("DualTrendVault", function () {
         { totalCollateral: totalCollateral, expiry: expiry, anchorPrice: anchorPrice, makerCollateral: makerCollateral, deadline: deadline + 1, maker: maker }
       ], vault, minter, referral, eip721Domain);
       // Perform assertions
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], 
-        [expiry, anchorPrice, makerCollateral.mul(parseEther("1")).div(totalCollateral)]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"],
+        [expiry, anchorPrice, makerCollateral.mul(parseEther("1")).div(totalCollateral), 0]);
       const makerProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 1]);
       expect(await vault.balanceOf(minter.address, minterProductId)).to.equal(parseEther("100").mul(2));
       expect(await vault.balanceOf(maker.address, makerProductId)).to.equal(parseEther("100").mul(2));
@@ -324,7 +324,7 @@ describe("DualTrendVault", function () {
 
     it("should burn tokens", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceA, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceA, premiumPercentage, 0]);
       const quoteFee = parseEther("1").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       await expect(vault.connect(minter).burn(expiry, anchorPriceA, premiumPercentage)).to.emit(vault, "Burned")
         .withArgs(minter.address, minterProductId, parseEther("100"), 0, parseEther("1").sub(quoteFee), 0, quoteFee);
@@ -333,7 +333,7 @@ describe("DualTrendVault", function () {
     });
     it("should burn tokens if not quote all", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage, 0]);
       const fee = parseEther("50").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       const quoteFee = parseEther("1").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       await expect(vault.connect(minter).burn(expiry, anchorPriceB, premiumPercentage)).to.emit(vault, "Burned")
@@ -343,7 +343,7 @@ describe("DualTrendVault", function () {
     });
     it("should burn tokens if no quote", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceC, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceC, premiumPercentage, 0]);
       const fee = parseEther("100").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       await expect(vault.connect(minter).burn(expiry, anchorPriceC, premiumPercentage)).to.emit(vault, "Burned")
         .withArgs(minter.address, minterProductId, parseEther("100"), parseEther("100").sub(fee), 0, fee, 0);
@@ -352,13 +352,13 @@ describe("DualTrendVault", function () {
     });
     it("should revert if not past expiry + 2 hours", async function () {
       //await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage, 0]);
       await expect(vault.connect(minter).burn(expiry, anchorPriceA, premiumPercentage))
         .to.be.revertedWith("Vault: not expired");
     });
     it("should revert if balance == 0", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage, 0]);
       await expect(vault.connect(maker).burn(expiry, anchorPriceA, premiumPercentage))
         .to.be.revertedWith("Vault: zero amount");
     });
@@ -471,7 +471,7 @@ describe("DualTrendVault", function () {
 
     it("should collect quote fee", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceA, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceA, premiumPercentage, 0]);
       const quoteFee = parseEther("1").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       await vault.connect(minter).burn(expiry, anchorPriceA, premiumPercentage);
       expect(await vault.totalQuoteFee()).to.equal(quoteFee);
@@ -481,7 +481,7 @@ describe("DualTrendVault", function () {
     });
     it("should collect fee", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceC, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceC, premiumPercentage, 0]);
       const fee = parseEther("100").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       await vault.connect(minter).burn(expiry, anchorPriceC, premiumPercentage);
       expect(await vault.totalFee()).to.equal(fee);
@@ -491,7 +491,7 @@ describe("DualTrendVault", function () {
     });
     it("should collect both quote fee and fee", async function () {
       await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage, 0]);
       const fee = parseEther("50").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       const quoteFee = parseEther("1").div(10).div(100);  //premiumPercentage 10%, feerate: 1%
       await vault.connect(minter).burn(expiry, anchorPriceB, premiumPercentage);
@@ -505,7 +505,7 @@ describe("DualTrendVault", function () {
     });
     it("should revert if both fees are 0", async function () {
       //await time.increaseTo(expiry + 2 * 3600);
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPriceB, premiumPercentage, 0]);
       await expect(vault.connect(minter).harvest())
         .to.be.revertedWith("Vault: zero fee");
     });
@@ -549,7 +549,7 @@ describe("DualTrendVault", function () {
       await vault.connect(userA).burn(expiry, anchorPrice, premiumPercentage);
       await vault.connect(userB).burn(expiry, anchorPrice, premiumPercentage);
       //1155
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, premiumPercentage]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiry, anchorPrice, premiumPercentage, 0]);
       const makerProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 1]);
       const productId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiry, anchorPrice, 0]);
       expect(await vault.balanceOf(userA.address, minterProductId)).to.equal(0);
@@ -582,7 +582,7 @@ describe("DualTrendVault", function () {
       const check1 = parseEther("70.948464442403836344");
       const check2 = parseEther("7.971737577798183858");
       const fee = parseEther("0.079797979797979797");
-      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256"], [expiryB, anchorPrice, premiumPercentageB]);
+      const minterProductId = solidityKeccak256(["uint256", "uint256", "uint256", "uint256"], [expiryB, anchorPrice, premiumPercentageB, 0]);
       await vault.connect(maker).quote(quoteAmount, {expiry: expiryB, anchorPrice: anchorPrice});
       await vault.connect(userA).safeTransferFrom(userA.address, userB.address, minterProductId, transferAmount, '0x01');
       await time.increaseTo(expiryB + 2 * 3600);

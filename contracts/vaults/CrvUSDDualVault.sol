@@ -347,7 +347,7 @@ contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
     }
 
     function getMinterProductId(uint256 expiry, uint256 anchorPrice, uint256 premiumPercentage) public pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(expiry, anchorPrice, premiumPercentage)));
+        return uint256(keccak256(abi.encodePacked(expiry, anchorPrice, premiumPercentage, uint256(0))));
     }
 
     // get decimals
