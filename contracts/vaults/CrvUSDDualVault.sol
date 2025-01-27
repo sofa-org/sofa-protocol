@@ -17,6 +17,7 @@ interface IScrvUSD {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
     function approve(address spender, uint256 amount) external returns (bool);
+    function previewRedeem(uint256 shares) external view returns(uint256 assets);
 }
 
 contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
@@ -330,7 +331,8 @@ contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
     }
 
     function harvest() external nonReentrant {
-        uint256 fee = scrvUSD.balanceOf(address(this)) - totalDeposit;
+        uint256 balance = scrvUSD.balanceOf(address(this));
+        uint256 fee = scrvUSD.previewRedeem(balance) - totalDeposit;
         require(fee > 0, "Vault: zero fee");
         scrvUSD.withdraw(fee, feeCollector, address(this));
 
@@ -338,7 +340,8 @@ contract CrvUSDDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeabl
     }
 
     function totalFee() external view returns (uint256) {
-       return scrvUSD.balanceOf(address(this)) - totalDeposit;
+        uint256 balance = scrvUSD.balanceOf(address(this));
+        return scrvUSD.previewRedeem(balance) - totalDeposit;
     }
 
     // get product id by parameters
