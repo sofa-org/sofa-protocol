@@ -14,7 +14,7 @@ import "../interfaces/ISpotOracle.sol";
 import "../interfaces/IFeeCollector.sol";
 import "../utils/SignatureBitMap.sol";
 
-contract SUSDASmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
+contract SUSDaSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
     using SafeERC20 for IERC20Metadata;
     using SignatureCheckerUpgradeable for address;
 
@@ -286,7 +286,7 @@ contract SUSDASmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgra
         uint256 maxPayoff = amount * collateralAtRiskPercentage / 1e18;
         uint256 payoffWithFee = strategy.getMinterPayoff(anchorPrices, oracle.settlePrices(expiry), maxPayoff);
         fee = payoffWithFee * IFeeCollector(feeCollector).settlementFeeRate() / 1e18;
-        payoff = payoffWithFee - fee + (amount * 1e18 - amount * collateralAtRiskPercentage) / 1e18;
+        payoff = payoffWithFee - fee + amount - amount * collateralAtRiskPercentage / 1e18;
     }
 
     // get product id by parameters
