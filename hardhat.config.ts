@@ -55,7 +55,8 @@ const config: HardhatUserConfig = {
         enabled: true,
         url: process.env.MAINNET_RPC_URL as string,
         //blockNumber: 20516000,   //for stETH related test
-        blockNumber: 21152000, //for ScrvUSD related test and other tests
+        //blockNumber: 21152000, //for ScrvUSD related test and other tests
+        blockNumber: 21160000, //for sUSDa related test
       },
       chainId: 1,
     },
