@@ -65,8 +65,6 @@ contract SUSDaSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgra
     //     _;
     // }
 
-    receive() external payable {}
-
     function initialize(
         string memory name_,
         string memory symbol_,

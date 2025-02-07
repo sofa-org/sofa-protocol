@@ -410,14 +410,4 @@ describe("SUSDaSmartTrendVault", function () {
       expect(await vault.decimals()).to.equal(await collateral.decimals());
     });
   });
-
-  describe("Receive", function () {
-    it("should receive eth", async function () {
-      const tx = await minter.sendTransaction({
-        to: vault.address,
-        value: parseEther("1")
-      });
-      expect(await ethers.provider.getBalance(vault.address)).to.equal(parseEther("1"));
-    });
-  });
 });
