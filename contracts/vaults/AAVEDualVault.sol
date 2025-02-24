@@ -38,7 +38,7 @@ contract AAVEDualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable,
     }
 
     bytes32 public DOMAIN_SEPARATOR;
-    uint256 public constant PRICE_DECIMALS = 1e8;
+    uint256 public constant PRICE_DECIMALS = 8;
     // bytes32 public constant EIP712DOMAIN_TYPEHASH = keccak256(
     //     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     // );
