@@ -37,7 +37,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
     }
 
     bytes32 public DOMAIN_SEPARATOR;
-    uint256 public constant PRICE_DECIMALS = 1e8;
+    uint256 public constant PRICE_DECIMALS = 8;
     // bytes32 public constant EIP712DOMAIN_TYPEHASH = keccak256(
     //     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     // );
@@ -212,7 +212,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         require(block.timestamp < product.expiry + 2 hours, "Vault: expired");
         uint256 productId = getProductId(product.expiry, product.anchorPrice, 1);
         require(balanceOf(_msgSender(), productId) >= amount, "Vault: insufficient balance");
-        uint256 quoteAmount = amount * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        uint256 quoteAmount = normalize(amount * product.anchorPrice);
         quoteAsset.safeTransferFrom(_msgSender(), address(this), quoteAmount);
         collateral.safeTransfer(_msgSender(), amount);
         _burn(_msgSender(), productId, amount);
@@ -233,7 +233,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
             uint256 productId = getProductId(product.expiry, product.anchorPrice, 1);
             require(balanceOf(_msgSender(), productId) >= amounts[i], "Vault: insufficient balance");
             totalCollateralAmount += amounts[i];
-            uint256 quoteAmount = amounts[i] * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+            uint256 quoteAmount = normalize(amounts[i] * product.anchorPrice);
             totalQuoteAmount += quoteAmount;
             quotePositions[productId] += amounts[i];
             productIds[i] = productId;
@@ -267,7 +267,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 totalPosition = totalPositions[productId];
         uint256 makerPosition = quotePositions[getProductId(expiry, anchorPrice, 1)];
         collateralPayoff = amount - amount.mulDiv(makerPosition, totalPosition, Math.Rounding.Up);
-        quoteAssetPayoff = (amount * makerPosition / totalPosition) * anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        quoteAssetPayoff = normalize((amount * makerPosition / totalPosition) * anchorPrice);
         fee = collateralPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         quoteFee = quoteAssetPayoff * premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         collateralPayoff -= fee;
@@ -318,7 +318,7 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
         uint256 totalPosition = totalPositions[getProductId(product.expiry, product.anchorPrice, 0)];
         uint256 makerPosition = quotePositions[getProductId(product.expiry, product.anchorPrice, 1)];
         collateralPayoff = amount - amount.mulDiv(makerPosition, totalPosition, Math.Rounding.Up);
-        quoteAssetPayoff = (amount * makerPosition / totalPosition) * product.anchorPrice * quoteAsset.decimals() / collateral.decimals() / PRICE_DECIMALS;
+        quoteAssetPayoff = normalize((amount * makerPosition / totalPosition) * product.anchorPrice);
         fee = collateralPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         quoteFee = quoteAssetPayoff * product.premiumPercentage * IFeeCollector(feeCollector).tradingFeeRate() / 1e36;
         collateralPayoff -= fee;
@@ -346,6 +346,16 @@ contract DualVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, Ree
 
     function getMinterProductId(uint256 expiry, uint256 anchorPrice, uint256 premiumPercentage) public pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked(expiry, anchorPrice, premiumPercentage, uint256(0))));
+    }
+
+    // nomalize
+    function normalize(uint256 amount) internal view returns (uint256) {
+        uint256 totalDecimals = collateral.decimals() + PRICE_DECIMALS;
+        if (quoteAsset.decimals() > totalDecimals) {
+            return amount * 10**(quoteAsset.decimals() - totalDecimals);
+        } else {
+            return amount / 10**(totalDecimals - quoteAsset.decimals());
+        }
     }
 
     // get decimals
