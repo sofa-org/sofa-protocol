@@ -95,6 +95,11 @@ const config: HardhatUserConfig = {
       accounts:
         process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
     },
+    sei: {
+      url: `https://evm-rpc.sei-apis.com`,
+      accounts:
+        process.env.PRIVATE_KEY_MAINNET !== undefined ? [process.env.PRIVATE_KEY_MAINNET] : [],
+    },
     merlinTestnet: {
       url: `https://testnet-rpc.merlinchain.io`,
       accounts: [process.env.PRIVATE_KEY],
