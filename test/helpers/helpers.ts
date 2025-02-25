@@ -33,6 +33,12 @@ async function deployFixture() {
     "COL",
     18
   );
+  const Usdt = await ethers.getContractFactory("MockERC20Mintable");
+  const usdt = await Usdt.deploy(
+    "Tether USD",
+    "USDT",
+    6
+  );
   // mock governance contract
   const Governance = await ethers.getContractFactory("MockERC20Mintable");
   const governance = await Governance.deploy(
@@ -58,6 +64,10 @@ async function deployFixture() {
   collateral.mint(minter.address, parseEther("100000"));
   collateral.mint(maker.address, parseEther("100000"));
   collateral.mint(lp.address, parseEther("100000"));
+  usdt.mint(owner.address, 100000*1e6);
+  usdt.mint(minter.address, 100000*1e6);
+  usdt.mint(maker.address, 100000*1e6);
+  usdt.mint(lp.address, 100000*1e6);
 
   await collateral.connect(minter).approve(PERMIT2_ADDRESS, constants.MaxUint256); // approve max
   await collateral.connect(lp).approve(UNI_ROUTERV2_ADDR, constants.MaxUint256); // approve max
@@ -137,7 +147,7 @@ async function deployFixture() {
   return {
     permit2, collateral, hlAggregator, spotAggregator, feeCollector, feeCollectorSimple,
     hlOracle, spotOracle, owner, minter, maker, referral, weth, steth,
-    rch, airdrop, stRCH, atoken, aavePool
+    rch, airdrop, stRCH, atoken, aavePool, usdt
   };
 }
 
