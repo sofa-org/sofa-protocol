@@ -14,7 +14,7 @@ import {
 } from "../helpers/helpers";
 
 describe("DualTrendVault", function () {
-  let weth, collateral, feeCollector, minter, maker, referral, vault, eip721Domain, aggregator;
+  let weth, collateral, feeCollector, minter, maker, referral, vault, eip721Domain, aggregator, usdt;
   beforeEach(async function () {
     ({
       weth,
@@ -22,7 +22,8 @@ describe("DualTrendVault", function () {
       feeCollector,
       minter,
       maker,
-      referral
+      referral,
+      usdt
     } = await loadFixture(deployFixture));
 
     // Deploy SmartTrendVault contract
@@ -198,7 +199,7 @@ describe("DualTrendVault", function () {
     });
     it("should revert if signature is not correct", async function () {
       const totalCollateral = parseEther("100");
-      const expiry = Math.floor(await time.latest() / 86400) * 86400 + 28800;
+      const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
       const anchorPrice = parseEther("0.01").div(1e10);
       const makerCollateral = parseEther("10");
       const deadline = await time.latest() + 600;
@@ -560,6 +561,101 @@ describe("DualTrendVault", function () {
       expect(await vault.totalPositions(productId)).to.equal(parseEther("200"));
       expect(await vault.quotePositions(makerProductId)).to.equal(parseEther("100"));
     });
+    it("collateral(6) and quoteAsset(18) have different decimals", async function () {
+      const collateral = usdt;
+      const Vault = await ethers.getContractFactory("DualVault");
+      vault = await upgrades.deployProxy(Vault, [
+        "Reliable USDT",
+        "rUSDT",
+        collateral.address,
+        weth.address,
+        feeCollector.address
+      ]);
+      eip721Domain = {
+        name: 'Vault',
+        version:  '1.0',
+        chainId: 1,
+        verifyingContract: vault.address,
+      };
+      await collateral.connect(minter).approve(vault.address, constants.MaxUint256); // approve max
+      await collateral.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
+      await weth.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
+      //mint
+      const totalCollateral = 100 * 1e6;
+      const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800;
+      const anchorPrice = parseEther("0.01").div(1e10);
+      const makerCollateral = 10 * 1e6;
+      const deadline = await time.latest() + 600;
+      await mint(totalCollateral, expiry, anchorPrice, makerCollateral, deadline, collateral, vault, minter, maker, referral, eip721Domain);
+      //quote
+      const amount = 10 * 1e6;
+      const beforeQuote = await weth.balanceOf(maker.address);
+      await expect(vault.connect(maker).quote(amount, {expiry: expiry, anchorPrice: anchorPrice}))
+        .to.changeTokenBalances(collateral, [maker, vault], [amount, -amount]);
+      expect(await weth.balanceOf(maker.address)).to.equal(beforeQuote.sub(parseEther("0.1")));
+      //burn
+      await time.increaseTo(expiry + 2 * 3600);
+      const premiumPercentage = parseEther("0.1");
+      const fee = 90 * 1e6 / 10 / 100; //premiumPercentage 10%, feerate: 1%
+      const quoteFee = parseEther("0.1").div(10).div(100); //premiumPercentage 10%, feerate: 1%
+      const beforeBurn = await weth.balanceOf(minter.address);
+      await expect(vault.connect(minter).burn(expiry, anchorPrice, premiumPercentage))
+        .to.changeTokenBalances(collateral, [minter, vault], [90 * 1e6 - fee, -(90 * 1e6 - fee)]);
+      expect(await weth.balanceOf(minter.address)).to.equal(beforeBurn.add(parseEther("0.1")).sub(quoteFee));
+    });
+    it("collateral(18) and quoteAsset(6) have different decimals", async function () {
+      const Vault = await ethers.getContractFactory("DualVault");
+      vault = await upgrades.deployProxy(Vault, [
+        "Reliable USDT",
+        "rUSDT",
+        collateral.address,
+        usdt.address,
+        feeCollector.address
+      ]);
+      eip721Domain = {
+        name: 'Vault',
+        version:  '1.0',
+        chainId: 1,
+        verifyingContract: vault.address,
+      };
+      await collateral.connect(minter).approve(vault.address, constants.MaxUint256); // approve max
+      await collateral.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
+      await usdt.connect(maker).approve(vault.address, constants.MaxUint256); // approve max
+      //mintBatch
+      const totalCollateral = parseEther("100");
+      const expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
+      const expiry1 = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400*2;
+      const anchorPrice = parseEther("0.01").div(1e10);
+      const makerCollateral = parseEther("10");
+      const deadline = await time.latest() + 600;
+      await mintBatch([
+        { totalCollateral: totalCollateral, expiry: expiry, anchorPrice: anchorPrice, makerCollateral: makerCollateral, deadline: deadline, maker: maker },
+        { totalCollateral: totalCollateral, expiry: expiry1, anchorPrice: anchorPrice, makerCollateral: makerCollateral, deadline: deadline, maker: maker }
+      ], vault, minter, referral, eip721Domain);
+      //quoteBatch
+      const amount = parseEther("10");
+      const beforeQuote = await usdt.balanceOf(maker.address);
+      await expect(vault.connect(maker).quoteBatch(
+        [amount, amount.mul(2)],
+        [
+          {expiry: expiry, anchorPrice: anchorPrice},
+          {expiry: expiry1, anchorPrice: anchorPrice}
+        ]
+      )).to.changeTokenBalances(collateral, [maker, vault], [amount.mul(3), amount.mul(-3)]);
+      expect(await usdt.balanceOf(maker.address)).to.equal(beforeQuote - 0.1 * 1e6 * 3);
+      //burnBatch
+      await time.increaseTo(expiry1 + 2 * 3600);
+      const premiumPercentage = parseEther("0.1");
+      const burnAmount = parseEther("170");
+      const fee =  burnAmount.div(10).div(100); //premiumPercentage 10%, feerate: 1%
+      const quoteFee = 0.3 * 1e6 / 10 / 100; //premiumPercentage 10%, feerate: 1%
+      const beforeBurn = await usdt.balanceOf(minter.address);
+      await expect(vault.connect(minter).burnBatch([
+        {expiry: expiry, anchorPrice: anchorPrice, premiumPercentage: premiumPercentage},
+        {expiry: expiry1, anchorPrice: anchorPrice, premiumPercentage: premiumPercentage}
+      ])).to.changeTokenBalances(collateral, [minter, vault], [burnAmount.sub(fee), burnAmount.sub(fee).mul(-1)]);
+      expect(await usdt.balanceOf(minter.address)).to.equal(Number(beforeBurn) + 0.3 * 1e6 - quoteFee);
+    });
   });
 
   describe("Issue", function () {
@@ -590,8 +686,8 @@ describe("DualTrendVault", function () {
         .to.changeTokenBalances(collateral, [userA, vault], [check1, check1.mul(-1)]);
       await expect(vault.connect(userB).burn(expiryB, anchorPrice, premiumPercentageB))
         .to.changeTokenBalances(collateral, [userB, vault], [check2, check2.mul(-1)]);
-      console.log("vault balance:", await collateral.balanceOf(vault.address));
-      console.log("totalFee:", await vault.totalFee());
+      //console.log("vault balance:", await collateral.balanceOf(vault.address));
+      //console.log("totalFee:", await vault.totalFee());
       //await expect(vault.connect(minter).harvest())
       //  .to.changeTokenBalances(collateral, [feeCollector, vault], [fee, fee.mul(-1)]);
     });
