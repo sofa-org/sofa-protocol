@@ -32,10 +32,10 @@ interface IAutomatorFactory {
     function feeCollector() external view returns (address);
 }
 
-contract Treasury is IERC1271, ERC4626, Ownable {
+contract RCHTreasury is IERC1271, ERC4626, Ownable {
     bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
 
-    IStRCH public immutable zenRCH;
+    IERC20 public immutable rch;
     IAutomatorFactory public immutable factory;
 
     uint256 public totalPositions;
@@ -48,16 +48,19 @@ contract Treasury is IERC1271, ERC4626, Ownable {
         _;
     }
 
+    event Deposit(address indexed caller, address indexed receiver, uint256 assets, uint256 shares, uint256 amount);
+    event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares, uint256 amount);
+
     constructor(
+        IERC20 rch_,
         IERC20 asset,
-        IZenRCH zenRCH_,
         IAutomatorFactory factory_
     )
         ERC4626(asset)
         ERC20(string(abi.encodePacked("Treasury of ", IERC20Metadata(address(asset)).name())), string(abi.encodePacked("v", IERC20Metadata(address(asset)).symbol())))
     {
-        zenRCH = zenRCH_;
-        asset.approve(address(zenRCH), type(uint256).max);
+        rch = rch_;
+        rch.approve(address(asset), type(uint256).max);
         factory = factory_;
     }
 
@@ -72,7 +75,7 @@ contract Treasury is IERC1271, ERC4626, Ownable {
         }
         _positions[id].amount += amount;
         totalPositions += amount;
-        zenRCH.transfer(msg.sender, amount);
+        IERC20(asset()).transfer(msg.sender, amount);
     }
 
     function _burnPositions() private nonReentrant {
@@ -96,17 +99,21 @@ contract Treasury is IERC1271, ERC4626, Ownable {
 
     function deposit(uint256 amount, address receiver) public override(ERC4626, IERC4626) nonReentrant returns (uint256 shares) {
         _burnPositions();
-        return super.deposit(amount, receiver);
+        uint256 assets = IZenRCH(asset()).mint(amount);
+        require(assets <= maxDeposit(receiver), "ERC4626: deposit more than max");
+
+        shares = previewDeposit(assets);
+        _deposit(_msgSender(), receiver, assets, shares);
+
+        emit Deposit(caller, receiver, assets, shares, amount);
     }
 
     function mint(uint256 shares, address receiver) public override(ERC4626, IERC4626) nonReentrant returns (uint256 assets) {
-        _burnPositions();
-        return super.mint(shares, receiver);
+        revert("RCHTreasury: minting is not supported, use deposit instead");
     }
 
     function withdraw(uint256 assets, address receiver, address owner) public override(ERC4626, IERC4626) nonReentrant returns (uint256 shares) {
-        _burnPositions();
-        return super.withdraw(assets, receiver, owner);
+        revert("RCHTreasury: withdrawing is not supported, use redeem instead");
     }
 
     function redeem(uint256 shares, address receiver, address owner) public override(ERC4626, IERC4626) nonReentrant returns (uint256 assets) {
@@ -115,8 +122,15 @@ contract Treasury is IERC1271, ERC4626, Ownable {
     }
 
     function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override(ERC4626) {
-        super._deposit(caller, receiver, assets, shares);
-        zenRCH.mint(assets);
+        // If _asset is ERC777, `transferFrom` can trigger a reentrancy BEFORE the transfer happens through the
+        // `tokensToSend` hook. On the other hand, the `tokenReceived` hook, that is triggered after the transfer,
+        // calls the vault, which is assumed not malicious.
+        //
+        // Conclusion: we need to do the transfer before we mint so that any reentrancy would happen before the
+        // assets are transferred and before the shares are minted, which is a valid state.
+        // slither-disable-next-line reentrancy-no-eth
+        SafeERC20.safeTransferFrom(asset(), caller, address(this), assets);
+        _mint(receiver, shares);
     }
 
     function _withdraw(address caller, address receiver, uint256 assets, uint256 shares) internal override(ERC4626) {
@@ -131,9 +145,9 @@ contract Treasury is IERC1271, ERC4626, Ownable {
         // Conclusion: we need to do the transfer after the burn so that any reentrancy would happen after the
         // shares are burned and after the assets are transferred, which is a valid state.
         _burn(owner, shares);
-        zenRCH.withdraw(assets, receiver);
+        uint256 amount = IZenRCH(asset()).withdraw(receiver, assets);
 
-        emit Withdraw(caller, receiver, owner, assets, shares);
+        emit Withdraw(caller, receiver, owner, assets, shares, amount);
     }
 
     // function isValidSignature(bytes32 hash, bytes memory signature) external view override returns (bytes4) {
@@ -145,7 +159,7 @@ contract Treasury is IERC1271, ERC4626, Ownable {
     // }
 
     function totalAssets() public view override returns (uint256) {
-        return zenRCH.balanceOf(address(this)) + totalPositions();
+        return asset().balanceOf(address(this)) + totalPositions();
     }
 
     function decimals() public view virtual override returns (uint8) {

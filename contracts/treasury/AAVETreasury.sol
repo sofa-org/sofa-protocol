@@ -32,7 +32,7 @@ interface IAutomatorFactory {
     function feeCollector() external view returns (address);
 }
 
-contract Treasury is IERC1271, ERC4626, Ownable {
+contract AAVETreasury is IERC1271, ERC4626, Ownable {
     bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
 
     IAutomatorFactory public immutable factory;
@@ -105,13 +105,11 @@ contract Treasury is IERC1271, ERC4626, Ownable {
     }
 
     function mint(uint256 shares, address receiver) public override(ERC4626, IERC4626) nonReentrant returns (uint256 assets) {
-        _burnPositions();
-        return super.mint(shares, receiver);
+        revert("AAVETreasury: minting shares is not supported");
     }
 
     function withdraw(uint256 assets, address receiver, address owner) public override(ERC4626, IERC4626) nonReentrant returns (uint256 shares) {
-        _burnPositions();
-        return super.withdraw(assets, receiver, owner);
+        revert("AAVETreasury: withdrawing assets is not supported, use redeem instead");
     }
 
     function redeem(uint256 shares, address receiver, address owner) public override(ERC4626, IERC4626) nonReentrant returns (uint256 assets) {
