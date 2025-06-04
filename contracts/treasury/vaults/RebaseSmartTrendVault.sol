@@ -11,6 +11,7 @@ import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/SignatureCheckerUpgradeable.sol";
 import "../../interfaces/ISmartTrendStrategy.sol";
 import "../../interfaces/ISpotOracle.sol";
+import "../../interfaces/ITreasury.sol";
 import "../../utils/SignatureBitMap.sol";
 
 contract RebaseSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgradeable, ReentrancyGuardUpgradeable, SignatureBitMap {
@@ -49,6 +50,7 @@ contract RebaseSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgr
     ISmartTrendStrategy public strategy;
     IERC20Metadata public collateral;
     ISpotOracle public oracle;
+    ITreasury public treasury;
 
     uint256 public totalSupply;
 
@@ -64,7 +66,8 @@ contract RebaseSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgr
         string memory symbol_,
         ISmartTrendStrategy strategy_,
         address collateral_,
-        ISpotOracle oracle_
+        ISpotOracle oracle_,
+        ITreasury treasury_
     ) initializer external {
         name = name_;
         symbol = symbol_;
@@ -73,6 +76,7 @@ contract RebaseSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgr
 
         collateral = IERC20Metadata(collateral_);
         oracle = oracle_;
+        treasury = treasury_;
 
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -128,7 +132,7 @@ contract RebaseSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgr
         consumeSignature(params.makerSignature);
 
         // transfer makerCollateral
-        collateral.safeTransferFrom(params.maker, address(this), params.makerCollateral);
+        treasury.mintPosition(params.expiry, params.anchorPrices, params.makerCollateral, params.maker);
         }
 
         // calculate atoken shares

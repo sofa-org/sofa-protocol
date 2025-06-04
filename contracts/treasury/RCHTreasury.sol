@@ -3,9 +3,9 @@
 pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -32,7 +32,8 @@ interface IAutomatorFactory {
     function feeCollector() external view returns (address);
 }
 
-contract RCHTreasury is IERC1271, ERC4626, Ownable {
+contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
 
     IERC20 public immutable rch;
@@ -60,7 +61,7 @@ contract RCHTreasury is IERC1271, ERC4626, Ownable {
         ERC20(string(abi.encodePacked("Treasury of ", IERC20Metadata(address(asset)).name())), string(abi.encodePacked("v", IERC20Metadata(address(asset)).symbol())))
     {
         rch = rch_;
-        rch.approve(address(asset), type(uint256).max);
+        rch.safeApprove(address(asset), type(uint256).max);
         factory = factory_;
     }
 
@@ -81,7 +82,7 @@ contract RCHTreasury is IERC1271, ERC4626, Ownable {
     function _burnPositions() private nonReentrant {
         uint256 _totalPositions;
         uint256 expiry = (block.timestamp - 8 hours) % 1 days * 1 days + 8 hours;
-        bytes32[] memory ids = expiries[expiry];
+        bytes32[] storage ids = expiries[expiry];
         while (ids.length > 0) {
             bytes32 id = ids[ids.length - 1];
             Product memory product = _positions[id];
@@ -97,7 +98,7 @@ contract RCHTreasury is IERC1271, ERC4626, Ownable {
         totalPositions -= _totalPositions;
     }
 
-    function deposit(uint256 amount, address receiver) public override(ERC4626, IERC4626) nonReentrant returns (uint256 shares) {
+    function deposit(uint256 amount, address receiver) public override(ERC4626) nonReentrant returns (uint256 shares) {
         _burnPositions();
         uint256 assets = IZenRCH(asset()).mint(amount);
         require(assets <= maxDeposit(receiver), "ERC4626: deposit more than max");
@@ -105,18 +106,18 @@ contract RCHTreasury is IERC1271, ERC4626, Ownable {
         shares = previewDeposit(assets);
         _deposit(_msgSender(), receiver, assets, shares);
 
-        emit Deposit(caller, receiver, assets, shares, amount);
+        emit Deposit(_msgSender(), receiver, assets, shares, amount);
     }
 
-    function mint(uint256 shares, address receiver) public override(ERC4626, IERC4626) nonReentrant returns (uint256 assets) {
+    function mint(uint256, address) public pure override(ERC4626) returns (uint256) {
         revert("RCHTreasury: minting is not supported, use deposit instead");
     }
 
-    function withdraw(uint256 assets, address receiver, address owner) public override(ERC4626, IERC4626) nonReentrant returns (uint256 shares) {
+    function withdraw(uint256, address, address) public pure override(ERC4626) returns (uint256) {
         revert("RCHTreasury: withdrawing is not supported, use redeem instead");
     }
 
-    function redeem(uint256 shares, address receiver, address owner) public override(ERC4626, IERC4626) nonReentrant returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner) public override(ERC4626) nonReentrant returns (uint256 assets) {
         _burnPositions();
         return super.redeem(shares, receiver, owner);
     }
@@ -129,11 +130,17 @@ contract RCHTreasury is IERC1271, ERC4626, Ownable {
         // Conclusion: we need to do the transfer before we mint so that any reentrancy would happen before the
         // assets are transferred and before the shares are minted, which is a valid state.
         // slither-disable-next-line reentrancy-no-eth
-        SafeERC20.safeTransferFrom(asset(), caller, address(this), assets);
+        SafeERC20.safeTransferFrom(IERC20(address(asset())), caller, address(this), assets);
         _mint(receiver, shares);
     }
 
-    function _withdraw(address caller, address receiver, uint256 assets, uint256 shares) internal override(ERC4626) {
+    function _withdraw(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets,
+        uint256 shares
+    ) internal override(ERC4626) {
         if (caller != owner) {
             _spendAllowance(owner, caller, shares);
         }
@@ -159,7 +166,7 @@ contract RCHTreasury is IERC1271, ERC4626, Ownable {
     // }
 
     function totalAssets() public view override returns (uint256) {
-        return asset().balanceOf(address(this)) + totalPositions();
+        return IERC20(asset()).balanceOf(address(this)) + totalPositions;
     }
 
     function decimals() public view virtual override returns (uint8) {
