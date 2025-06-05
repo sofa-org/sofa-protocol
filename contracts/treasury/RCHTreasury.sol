@@ -28,13 +28,11 @@ interface IVault {
 interface IAutomatorFactory {
     function vaults(address) external view returns (bool);
     function makers(address) external view returns (bool);
-    function referral() external view returns (address);
-    function feeCollector() external view returns (address);
 }
 
 contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
-    bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
+    // bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
 
     IERC20 public immutable rch;
     IAutomatorFactory public immutable factory;
@@ -76,24 +74,24 @@ contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
         }
         _positions[id].amount += amount;
         totalPositions += amount;
-        IERC20(asset()).transfer(msg.sender, amount);
+        IERC20(asset()).safeTransfer(msg.sender, amount);
     }
 
     function _burnPositions() private nonReentrant {
         uint256 _totalPositions;
-        uint256 expiry = (block.timestamp - 8 hours) % 1 days * 1 days + 8 hours;
-        bytes32[] storage ids = expiries[expiry];
-        while (ids.length > 0) {
-            bytes32 id = ids[ids.length - 1];
-            Product memory product = _positions[id];
-            IVault(product.vault).burn(product.expiry, product.anchorPrices, 1);
-            _totalPositions += product.amount;
-            ids.pop();
-            if (ids.length == 0) {
-                delete expiries[expiry];
-                expiry -= 1 days;
-                ids = expiries[expiry];
+        uint256 expiry = (block.timestamp - 8 hours) / 1 days * 1 days + 8 hours;
+        while (true) {
+            bytes32[] memory ids = expiries[expiry];
+            uint256 len = ids.length;
+            if (len == 0) break;
+            for (uint256 i = 0; i < len; ) {
+                bytes32 id = ids[i++];
+                Product memory product = _positions[id];
+                IVault(product.vault).burn(product.expiry, product.anchorPrices, 1);
+                _totalPositions += product.amount;
             }
+            delete expiries[expiry];
+            expiry -= 1 days;
         }
         totalPositions -= _totalPositions;
     }
