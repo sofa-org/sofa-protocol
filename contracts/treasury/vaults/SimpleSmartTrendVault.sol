@@ -136,7 +136,7 @@ contract SimpleSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgr
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
 
         _mint(_msgSender(), productId, totalCollateral, "");
-        _mint(params.maker, makerProductId, totalCollateral, "");
+        _mint(address(treasury), makerProductId, totalCollateral, "");
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
     }

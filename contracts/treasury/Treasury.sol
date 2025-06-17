@@ -4,6 +4,7 @@ pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -25,7 +26,7 @@ interface IAutomatorFactory {
     function makers(address) external view returns (bool);
 }
 
-contract Treasury is ERC4626, Ownable, ReentrancyGuard {
+contract Treasury is ERC4626, ERC1155Holder, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
@@ -66,7 +67,7 @@ contract Treasury is ERC4626, Ownable, ReentrancyGuard {
         IERC20(asset()).safeTransfer(msg.sender, amount);
     }
 
-    function _burnPositions() private nonReentrant {
+    function _burnPositions() private  {
         uint256 _totalPositions;
         uint256 expiry = (block.timestamp - 8 hours) / 1 days * 1 days + 8 hours;
         while (true) {

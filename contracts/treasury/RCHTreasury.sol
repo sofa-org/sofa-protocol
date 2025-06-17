@@ -4,10 +4,12 @@ pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 interface IZenRCH {
     function mint(uint256 amount) external returns (uint256);
@@ -30,8 +32,9 @@ interface IAutomatorFactory {
     function makers(address) external view returns (bool);
 }
 
-contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
+contract RCHTreasury is ERC4626, ERC1155Holder, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using Math for uint256;
     // bytes4 private constant MAGIC_VALUE = 0x1626ba7e;
 
     IERC20 public immutable rch;
@@ -46,9 +49,6 @@ contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
         require(IAutomatorFactory(factory).vaults(msg.sender), "Treasury: caller is not a vault");
         _;
     }
-
-    event Deposit(address indexed caller, address indexed receiver, uint256 assets, uint256 shares, uint256 amount);
-    event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares, uint256 amount);
 
     constructor(
         IERC20 rch_,
@@ -77,7 +77,7 @@ contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
         IERC20(asset()).safeTransfer(msg.sender, amount);
     }
 
-    function _burnPositions() private nonReentrant {
+    function _burnPositions() private {
         uint256 _totalPositions;
         uint256 expiry = (block.timestamp - 8 hours) / 1 days * 1 days + 8 hours;
         while (true) {
@@ -98,13 +98,13 @@ contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
 
     function deposit(uint256 amount, address receiver) public override(ERC4626) nonReentrant returns (uint256 shares) {
         _burnPositions();
+        rch.safeTransferFrom(_msgSender(), address(this), amount);
         uint256 assets = IZenRCH(asset()).mint(amount);
         require(assets <= maxDeposit(receiver), "ERC4626: deposit more than max");
-
-        shares = previewDeposit(assets);
-        _deposit(_msgSender(), receiver, assets, shares);
-
-        emit Deposit(_msgSender(), receiver, assets, shares, amount);
+        shares = assets.mulDiv(totalSupply() + 10 ** _decimalsOffset(), totalAssets() + 1 - assets, Math.Rounding.Down);
+        _mint(receiver, shares);
+        
+        emit Deposit(_msgSender(), receiver, amount, shares);
     }
 
     function mint(uint256, address) public pure override(ERC4626) returns (uint256) {
@@ -118,18 +118,6 @@ contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
     function redeem(uint256 shares, address receiver, address owner) public override(ERC4626) nonReentrant returns (uint256 assets) {
         _burnPositions();
         return super.redeem(shares, receiver, owner);
-    }
-
-    function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override(ERC4626) {
-        // If _asset is ERC777, `transferFrom` can trigger a reentrancy BEFORE the transfer happens through the
-        // `tokensToSend` hook. On the other hand, the `tokenReceived` hook, that is triggered after the transfer,
-        // calls the vault, which is assumed not malicious.
-        //
-        // Conclusion: we need to do the transfer before we mint so that any reentrancy would happen before the
-        // assets are transferred and before the shares are minted, which is a valid state.
-        // slither-disable-next-line reentrancy-no-eth
-        SafeERC20.safeTransferFrom(IERC20(address(asset())), caller, address(this), assets);
-        _mint(receiver, shares);
     }
 
     function _withdraw(
@@ -152,7 +140,7 @@ contract RCHTreasury is ERC4626, Ownable, ReentrancyGuard {
         _burn(owner, shares);
         uint256 amount = IZenRCH(asset()).withdraw(receiver, assets);
 
-        emit Withdraw(caller, receiver, owner, assets, shares, amount);
+        emit Withdraw(caller, receiver, owner, amount, shares);
     }
 
     // function isValidSignature(bytes32 hash, bytes memory signature) external view override returns (bytes4) {

@@ -151,7 +151,7 @@ contract RebaseSmartTrendVault is Initializable, ContextUpgradeable, ERC1155Upgr
         uint256 makerProductId = getProductId(params.expiry, params.anchorPrices, uint256(1));
 
         _mint(_msgSender(), productId, rebaseTokenShare, "");
-        _mint(params.maker, makerProductId, rebaseTokenShare, "");
+        _mint(address(treasury), makerProductId, rebaseTokenShare, "");
         }
 
         emit Minted(_msgSender(), params.maker, referral, totalCollateral, params.expiry, params.anchorPrices, params.makerCollateral);
