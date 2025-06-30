@@ -10,7 +10,7 @@ const {
   signSignatures,
 } = require("../helpers/helpers");
 
-describe("Treasury", function () {
+describe("AAVETreasury", function () {
   let collateral, feeCollector, oracle, owner, minter, maker, referral, aavePool, vaultA, vaultB,
       eip721DomainA, eip721DomainB, atoken, automatorBase, automatorFactory, treasury;
   beforeEach(async function () {
