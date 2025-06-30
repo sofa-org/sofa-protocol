@@ -16,9 +16,14 @@ struct Product {
     uint256 amount;
 }
 
+struct Position {
+    uint256 expiry;
+    uint256[2] anchorPrices;
+}
+    
 struct PositionBurn {
     address vault;
-    Product[] products;
+    Position[] positions;
 }
 
 interface IVault {
@@ -76,20 +81,20 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
     }
 
     function burnPositions(
-        PositionBurn[] calldata positions
+        PositionBurn[] calldata positionsToBurn
     ) external nonReentrant {
         uint256 _totalPositions;
-        for (uint256 i = 0; i < positions.length; i++) {
-            address vault = positions[i].vault;
-            Product[] calldata products = positions[i].products;
-            for (uint256 j = 0; j < products.length; j++) {
-                Product calldata product = products[j];
+        for (uint256 i = 0; i < positionsToBurn.length; i++) {
+            address vault = positionsToBurn[i].vault;
+            Position[] calldata positions = positionsToBurn[i].positions;
+            for (uint256 j = 0; j < positions.length; j++) {
+                Position calldata position = positions[j];
                 IVault(vault).burn(
-                    product.expiry,
-                    product.anchorPrices,
+                    position.expiry,
+                    position.anchorPrices,
                     1
                 );
-                bytes32 id = keccak256(abi.encodePacked(vault, product.expiry, product.anchorPrices));
+                bytes32 id = keccak256(abi.encodePacked(vault, position.expiry, position.anchorPrices));
                 _totalPositions += _positions[id].amount;
                 delete _positions[id];
             }
