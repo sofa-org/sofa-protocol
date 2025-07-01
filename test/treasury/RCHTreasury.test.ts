@@ -200,23 +200,26 @@ describe("RCHTreasury", function () {
     let productMintB: any;
     let productMintC: any;
     let productMintD: any;
-    let expiry, expiryD, anchorPrices, anchorPricesD;
+    let productMintE: any;
+    let expiry, expiryD, anchorPrices, anchorPricesC, anchorPricesD, anchorPricesE;
     beforeEach(async function () {
       //deposit to treasury
       await treasury.connect(minter).deposit(parseEther("100"), owner.address);
       //automator factory config
       await automatorFactory.enableMakers([maker.address]);
       await automatorFactory.enableVaults([vaultA.address, vaultB.address]);
-      await automatorBase.connect(minter).deposit(ethers.utils.parseEther("400"));
+      await automatorBase.connect(minter).deposit(ethers.utils.parseEther("500"));
       //vault parameters
       const totalCollateral = parseEther("100");
       const makerCollateral = parseEther("10");
       const makerCollateralB = parseEther("20");
       expiry = Math.ceil(await time.latest() / 86400) * 86400 + 28800 + 86400;
-      expiryD = expiry + 86400; //next day
+      expiryD = expiry + 86400 * 2; //next day
       const deadline = await time.latest() + 600;
       anchorPrices = [parseEther("28000"), parseEther("30000")];
+      anchorPricesC = [parseEther("30000"), parseEther("32000")];
       anchorPricesD = [parseEther("29000"), parseEther("30000")];
+      anchorPricesE = [parseEther("30000"), parseEther("31000")];
       //signatures
       const signature = await signMintParams(
         totalCollateral,
@@ -243,7 +246,7 @@ describe("RCHTreasury", function () {
       const signatureC = await signMintParams( //anchorPricesD
         totalCollateral,
         expiry,
-        anchorPricesD,
+        anchorPricesC,
         makerCollateral,
         deadline,
         vaultA,
@@ -261,6 +264,17 @@ describe("RCHTreasury", function () {
         automatorBase,
         maker,
         eip721DomainB
+      );
+      const signatureE = await signMintParams( //makerCollateralB
+        totalCollateral,
+        expiry,
+        anchorPricesE,
+        makerCollateral,
+        deadline,
+        vaultA,
+        automatorBase,
+        maker,
+        eip721DomainA
       );
       //product
       productMint = { //win
@@ -292,7 +306,7 @@ describe("RCHTreasury", function () {
         totalCollateral: totalCollateral,
         mintParams: {
           expiry: expiry,
-          anchorPrices: anchorPricesD,
+          anchorPrices: anchorPricesC,
           makerCollateral: makerCollateral,
           deadline: deadline,
           maker: maker.address,
@@ -311,12 +325,25 @@ describe("RCHTreasury", function () {
           makerSignature: signatureD
         }
       };
+      productMintE = { //maker win 100
+        vault: vaultA.address,
+        totalCollateral: totalCollateral,
+        mintParams: {
+          expiry: expiry,
+          anchorPrices: anchorPricesE,
+          makerCollateral: makerCollateral,
+          deadline: deadline,
+          maker: maker.address,
+          makerSignature: signatureE
+        }
+      };
     });
     
     it("should mint product", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.changeTokenBalances(zenRCH, [automatorBase, treasury, vaultA], [parseEther("90").mul(-1), parseEther("10").mul(-1), parseEther("100")]);
+      expect(await treasury.minExpiry()).to.equal(expiry);
       expect(await treasury.totalPositions()).to.equal(parseEther("10"));
       expect(await treasury.totalAssets()).to.equal(parseEther("100"));
       expect(await treasury.expiries(expiry, 0)).to.equal(computeId(vaultA.address, expiry, anchorPrices));
@@ -339,7 +366,48 @@ describe("RCHTreasury", function () {
       await oracle.settle();
       //deposit
       await expect(treasury.connect(minter).deposit(0, owner.address))
+        .to.changeTokenBalances(zenRCH, [minter, treasury], [0, 0]);
+      expect(await treasury.minExpiry()).to.equal(expiry + 86400);
+      expect(await treasury.totalPositions()).to.equal(0);
+      expect(await treasury.totalAssets()).to.equal(parseEther("90"));
+      await expect(treasury.expiries(expiry, 0)).to.be.reverted;
+    });
+    it("should position remain if deposit 0 before minExpiry", async function () {
+      const signaturesSignature = await signSignatures([productMint], maker);
+      await automatorBase.mintProducts([productMint], signaturesSignature);
+      await treasury.connect(minter).deposit(0, owner.address);
+      expect(await treasury.minExpiry()).to.equal(expiry);
+      expect(await treasury.totalPositions()).to.equal(parseEther("10"));
+      expect(await treasury.totalAssets()).to.equal(parseEther("100"));
+      expect(await treasury.expiries(expiry, 0)).to.equal(computeId(vaultA.address, expiry, anchorPrices));
+    });
+    it("should burn Positions with parameters", async function () {
+      //mint
+      const signaturesSignature = await signSignatures([productMint], maker);
+      await automatorBase.mintProducts([productMint], signaturesSignature);
+      await time.increaseTo(expiry);
+      await oracle.settle();
+      //burn
+      await expect(treasury.connect(minter).burnPositions([{vault:vaultA.address, positions:[{expiry:expiry, anchorPrices:anchorPrices}]}]))
+        .to.changeTokenBalances(zenRCH, [minter, treasury], [0, 0]);
+      expect(await treasury.minExpiry()).to.equal(expiry);
+      expect(await treasury.totalPositions()).to.equal(0);
+      expect(await treasury.totalAssets()).to.equal(parseEther("90"));
+      expect(await treasury.expiries(expiry, 0)).to.equal(computeId(vaultA.address, expiry, anchorPrices));
+    });
+    it("should deposit 0 after burn Positions with parameters", async function () {
+      //mint
+      const signaturesSignature = await signSignatures([productMint], maker);
+      await automatorBase.mintProducts([productMint], signaturesSignature);
+      await time.increaseTo(expiry);
+      await oracle.settle();
+      //burn
+      await expect(treasury.connect(minter).burnPositions([{vault:vaultA.address, positions:[{expiry:expiry, anchorPrices:anchorPrices}]}]))
         .to.changeTokenBalances(collateral, [minter, treasury], [0, 0]);
+      //deposit
+      await expect(treasury.connect(minter).deposit(0, owner.address))
+        .to.changeTokenBalances(collateral, [minter, treasury], [0, 0]);
+      expect(await treasury.minExpiry()).to.equal(expiry + 86400);
       expect(await treasury.totalPositions()).to.equal(0);
       expect(await treasury.totalAssets()).to.equal(parseEther("90"));
       await expect(treasury.expiries(expiry, 0)).to.be.reverted;
@@ -354,6 +422,7 @@ describe("RCHTreasury", function () {
       const amount = parseEther("90"); 
       await expect(treasury.connect(minter).deposit(amount, owner.address))
         .to.changeTokenBalances(collateral, [minter, treasury], [amount.mul(-1), 0]);
+      expect(await treasury.minExpiry()).to.equal(expiry + 86400);
       expect(await zenRCH.balanceOf(treasury.address)).to.equal(amount.mul(2));
       expect(await treasury.totalPositions()).to.equal(0);
       expect(await treasury.totalAssets()).to.equal(amount.mul(2));
@@ -370,6 +439,8 @@ describe("RCHTreasury", function () {
       const shares = parseEther("100");
       await expect(treasury.connect(owner).redeem(shares, minter.address, owner.address))
         .to.changeTokenBalances(collateral, [minter, treasury], [parseEther("90"), 0]);
+      expect(await treasury.minExpiry()).to.equal(expiry + 86400);
+      await expect(treasury.expiries(expiry, 0)).to.be.reverted;
       expect(await zenRCH.balanceOf(treasury.address)).to.equal(0);
       expect(await treasury.totalPositions()).to.equal(0);
       expect(await treasury.totalAssets()).to.equal(0);
@@ -379,9 +450,10 @@ describe("RCHTreasury", function () {
       const signaturesSignature = await signSignatures([productMintD, productMintC, productMintB, productMint], maker);
       await expect(automatorBase.mintProducts([productMintD, productMintC, productMintB, productMint], signaturesSignature))
         .to.changeTokenBalances(zenRCH, [automatorBase, treasury, vaultA, vaultB], [parseEther("350").mul(-1), parseEther("50").mul(-1), parseEther("300"), parseEther("100")]);
+      expect(await treasury.minExpiry()).to.equal(expiry);
       expect(await treasury.totalPositions()).to.equal(parseEther("50"));
       expect(await treasury.totalAssets()).to.equal(parseEther("100"));
-      expect(await treasury.expiries(expiry, 0)).to.equal(computeId(vaultA.address, expiry, anchorPricesD));
+      expect(await treasury.expiries(expiry, 0)).to.equal(computeId(vaultA.address, expiry, anchorPricesC));
       expect(await treasury.expiries(expiry, 1)).to.equal(computeId(vaultA.address, expiry, anchorPrices));
       expect(await treasury.expiries(expiryD, 0)).to.equal(computeId(vaultB.address, expiryD, anchorPricesD));
     });
@@ -394,13 +466,46 @@ describe("RCHTreasury", function () {
       await oracle.settle();
       //deposit
       await expect(treasury.connect(minter).deposit(0, owner.address))
-        .to.changeTokenBalances(zenRCH, [minter, treasury], [0, parseEther("100")]);
+        .to.changeTokenBalances(zenRCH, [minter, treasury], [0, parseEther("200")]);
+      expect(await treasury.minExpiry()).to.equal(expiryD + 86400);
       expect(await treasury.totalPositions()).to.equal(0);
       await expect(treasury.expiries(expiry, 0)).to.be.reverted;
       await expect(treasury.expiries(expiryD, 0)).to.be.reverted;
-      expect(await treasury.totalAssets()).to.equal(parseEther("150"));
+      expect(await treasury.totalAssets()).to.equal(parseEther("250"));
       expect(await treasury.balanceOf(owner.address)).to.equal(parseEther("100"));
     });
+    it("should burn some positions and deposit 0 to burn other positions", async function () {
+      const signaturesSignature = await signSignatures([productMintD, productMintC, productMintB, productMint, productMintE], maker);
+      await automatorBase.mintProducts([productMintD, productMintC, productMintB, productMint, productMintE], signaturesSignature);
+      await time.increaseTo(expiry);
+      await oracle.settle();
+      await time.increaseTo(expiryD);
+      await oracle.settle();
+      //burn
+      await expect(treasury.connect(minter).burnPositions([
+        {vault:vaultA.address, positions:[
+          {expiry:expiry, anchorPrices:anchorPrices},
+          {expiry:expiry, anchorPrices:anchorPricesC}]
+        },
+        {vault:vaultB.address, positions:[{expiry:expiryD, anchorPrices:anchorPricesD}]}
+      ])).to.changeTokenBalances(zenRCH, [minter, treasury], [0, parseEther("200")]);
+      expect(await treasury.minExpiry()).to.equal(expiry);
+      expect(await treasury.totalPositions()).to.equal(parseEther("10"));
+      expect(await treasury.totalAssets()).to.equal(parseEther("250"));
+      expect(await treasury.expiries(expiry, 0)).to.equal(computeId(vaultA.address, expiry, anchorPricesC));
+      expect(await treasury.expiries(expiry, 1)).to.equal(computeId(vaultA.address, expiry, anchorPrices));
+      expect(await treasury.expiries(expiry, 2)).to.equal(computeId(vaultA.address, expiry, anchorPricesE));
+      expect(await treasury.expiries(expiryD, 0)).to.equal(computeId(vaultB.address, expiryD, anchorPricesD));
+      //deposit
+      await expect(treasury.connect(minter).deposit(0, owner.address))
+       .to.changeTokenBalances(zenRCH, [minter, treasury], [0, parseEther("100")]);
+      expect(await treasury.minExpiry()).to.equal(expiryD + 86400);
+      expect(await treasury.totalPositions()).to.equal(0);
+      await expect(treasury.expiries(expiry, 0)).to.be.reverted;
+      await expect(treasury.expiries(expiryD, 0)).to.be.reverted;
+      expect(await treasury.totalAssets()).to.equal(parseEther("340"));
+      expect(await treasury.balanceOf(owner.address)).to.equal(parseEther("100"));
+    }); 
   });
 })
 
