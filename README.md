@@ -1,66 +1,122 @@
-## Foundry
+# SOFA Protocol
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-Foundry consists of:
+SOFA Protocol is a decentralized finance(DeFi) protocol designed to empower secure and efficient interactions within a blockchain ecosystem. This repository contains the core smart contracts and scripts built using [Hardhat](https://hardhat.org/), along with supporting libraries and documentation.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+## Table of Contents
 
-## Documentation
+- [Overview](#overview)
+- [Audits](#audits)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Contributing](#contributing)
+- [Connect With the Community](#connect-with-the-community)
+- [License](#license)
 
-https://book.getfoundry.sh/
+## Overview
+
+The SOFA protocols offer a new way to handle crypto by making transactions clear and safe. It lets you earn based on benefits without worrying about asset safety. All details are recorded transparently on the blockchain, supporting various products. Tokenized positions improve capital efficiency and can be used across DeFi and centralized platforms. Using ERC-1155 tokens saves on costs, and the system is designed to be sustainable and user-friendly.
+
+For more details, please visit SOFA.org homepage and explore SOFA Documentation:
+
+- [SOFA.org](https://www.sofa.org/)
+
+- [SOFA Documentation](https://docs.sofa.org/)
+
+## Audits
+
+The SOFA protocols have been subjected to comprehensive and strict security audits conducted by several renowned independent organizations. For further details and insights, please refer to the full audit reports published by these organizations:
+
+- [Code4rena(Zenith)](https://github.com/zenith-security/reports/blob/main/reports/Audit%20Report%20-%20Sofa%20%28May%202024%29.pdf)
+- [Peckshield](https://github.com/peckshield/publications/blob/master/audit_reports/PeckShield-Audit-Report-Sofa-v1.0.pdf)
+- [SigmaPrime](https://github.com/sigp/public-audits/blob/master/reports/sofa/review.pdf)
+- [Automator audited by Code4rena(Zenith)](https://github.com/zenith-security/reports/blob/main/reports/Audit%20Report%20-%20Sofa%20Automator%28Oct%202024%29.pdf)
+- [Automator2.0 audited by Code4rena(Zenith)](https://github.com/zenith-security/reports/blob/main/reports/Zenith%20Audit%20Report%20-%20Sofa%20Automator%202.0.pdf)
+- [Automator2.0 & Dual Currency audited by yAudit](https://reports.electisec.tech/reports/01-2025-Sofa-Protocol)
+
+## Getting Started
+
+SOFA Protocol leverages Hardhat to streamline smart contract development, testing, and deployment. Our goal is to provide a modular, scalable, and secure framework that can integrate seamlessly with DeFi ecosystems.
+
+### Prerequisites
+
+Ensure you have the following installed:
+- [Node.js](https://nodejs.org/) (v18.x or later)
+- [npm](https://www.npmjs.com/)
+- [Hardhat](https://hardhat.org/) (installed via npm)
+
+### Installation
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/sofa-org/sofa-protocol.git
+cd sofa-protocol
+npm install
+```
+
+### Configuration
+
+Set up .env file to set your configuration variables (e.g., network URLs, private keys) used in hardhat.config.ts for your development environment.
 
 ## Usage
 
-### Build
+### Compiling Contracts
 
-```shell
-$ forge build
+Compile the smart contracts using Hardhat:
+
+```bash
+npx hardhat compile
 ```
 
-### Test
+### Running Tests
 
-```shell
-$ forge test
+Run the test suite to ensure everything is working as expected:
+
+```bash
+npx hardhat test
 ```
 
-### Format
+## Contributing
 
-```shell
-$ forge fmt
+Contributions are welcome. To contribute:
+
+### Fork the repository
+
+### Create a new branch
+
+```bash
+git checkout -b feature/your-feature-name
 ```
 
-### Gas Snapshots
+### Make your changes
+Update files as needed.
 
-```shell
-$ forge snapshot
+### Add all your changes
+
+```bash
+git add .
 ```
 
-### Anvil
+### Commit your changes
 
-```shell
-$ anvil
+```bash
+git commit -m "Describe your changes"
 ```
 
-### Deploy
+### Push the branch to your fork
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```bash
+git push origin feature/your-feature-name
 ```
 
-### Cast
+### Submit a Pull Request on GitHub for review.
+Please ensure that your contributions follow the existing style and structure, and that you test locally before submitting a pull request.
 
-```shell
-$ cast <subcommand>
-```
+## Connect With the Community
 
-### Help
+You can join the [Discord](https://discord.gg/sofaorg) to ask questions about the protocol or talk about SOFA with other peers.
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+## License
+This project is licensed under the MIT License. 
