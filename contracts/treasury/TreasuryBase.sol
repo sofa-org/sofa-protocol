@@ -74,10 +74,10 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
         }
         _positions[id].amount += amount;
         totalPositions += amount;
-        IERC20(asset()).safeTransfer(msg.sender, amount);
         if (minExpiry == 0 || expiry < minExpiry) {
             minExpiry = expiry;
         }
+        IERC20(asset()).safeTransfer(msg.sender, amount);
     }
 
     function burnPositions(
