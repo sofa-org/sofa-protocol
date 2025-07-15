@@ -39,7 +39,7 @@ describe("AutomatorBase", function () {
     const StrategyB = await ethers.getContractFactory("SmartBear");
     const strategyB = await StrategyB.deploy();
     // Deploy SmartTrendVault contract
-    const VaultA = await ethers.getContractFactory("RebaseSmartTrendVault");
+    const VaultA = await ethers.getContractFactory("contracts/automators/vaults/RebaseSmartTrendVault.sol:RebaseSmartTrendVault");
     vaultA = await upgrades.deployProxy(VaultA, [
       "Reliable USDT",
       "rUSDT",
