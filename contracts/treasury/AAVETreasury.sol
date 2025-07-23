@@ -37,10 +37,10 @@ contract AAVETreasury is TreasuryBase {
         }
         _positions[id].amount += amount;
         totalPositions += amount;
-        IERC20(address(aToken)).safeTransfer(msg.sender, amount);
         if (minExpiry == 0 || expiry < minExpiry) {
             minExpiry = expiry;
         }
+        IERC20(address(aToken)).safeTransfer(msg.sender, amount);
     }
 
     function mint(uint256, address) public pure override returns (uint256) {
