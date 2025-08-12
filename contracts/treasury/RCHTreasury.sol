@@ -60,7 +60,7 @@ contract RCHTreasury is TreasuryBase {
         }
 
         _burn(owner, shares);
-        uint256 amount = IZenRCH(asset()).withdraw(receiver, assets);
+        uint256 amount = IZenRCH(asset()).withdraw(receiver, totalSupply() > 0 ? assets - assets / 100 : assets);
 
         emit Withdraw(caller, receiver, owner, amount, shares);
     }

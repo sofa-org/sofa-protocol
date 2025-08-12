@@ -51,6 +51,16 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
         _;
     }
 
+    modifier redeemable() {
+        uint256 dayOfWeek = (block.timestamp / 86400 + 4) % 7; // 0 = Sunday, 1 = Monday, 2 = Tuesday, etc.
+        uint256 hourOfDay = (block.timestamp % 86400) / 3600; // Hour in UTC
+        require(
+            (dayOfWeek == 2 || dayOfWeek == 4) && (hourOfDay >= 8 && hourOfDay < 16),
+            "Treasury: withdrawals only allowed on Tuesdays and Thursdays 8:00-16:00 UTC"
+        );
+        _;
+    }
+
     constructor(
         IERC20 asset,
         IAutomatorFactory factory_
@@ -146,12 +156,12 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
         return super.mint(shares, receiver);
     }
 
-    function withdraw(uint256 assets, address receiver, address owner) public virtual override(ERC4626) nonReentrant returns (uint256 shares) {
+    function withdraw(uint256 assets, address receiver, address owner) public virtual override(ERC4626) nonReentrant redeemable returns (uint256 shares) {
         _burnPositions();
         return super.withdraw(assets, receiver, owner);
     }
 
-    function redeem(uint256 shares, address receiver, address owner) public virtual override(ERC4626) nonReentrant returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address owner) public virtual override(ERC4626) nonReentrant redeemable returns (uint256 assets) {
         _burnPositions();
         return super.redeem(shares, receiver, owner);
     }
@@ -170,5 +180,22 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
 
     function decimals() public view virtual override returns (uint8) {
         return IERC20Metadata(asset()).decimals();
+    }
+
+    function _withdraw(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets,
+        uint256 shares
+    ) internal virtual override {
+        if (caller != owner) {
+            _spendAllowance(owner, caller, shares);
+        }
+
+        _burn(owner, shares);
+        IERC20(asset()).safeTransfer(receiver, totalSupply() > 0 ? assets - assets / 100 : assets);
+
+        emit Withdraw(caller, receiver, owner, assets, shares);
     }
 }

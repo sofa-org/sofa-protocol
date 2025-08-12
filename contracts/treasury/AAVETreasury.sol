@@ -92,7 +92,7 @@ contract AAVETreasury is TreasuryBase {
         _burn(owner, shares);
         pool.withdraw(
             address(asset()),
-            assets,
+            totalSupply() > 0 ? assets - assets / 100 : assets,
             receiver
         );
 
