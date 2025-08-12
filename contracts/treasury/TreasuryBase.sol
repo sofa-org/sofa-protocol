@@ -64,6 +64,7 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
     
 
     function mintPosition(uint256 expiry, uint256[2] calldata anchorPrices, uint256 amount, address maker) external virtual nonReentrant onlyVaults {
+        require(amount > 0, "Treasury: amount must be greater than zero");
         require(factory.makers(maker), "Treasury: signer is not a maker");
         bytes32 id = keccak256(abi.encodePacked(msg.sender, expiry, anchorPrices));
         if (_positions[id].amount == 0) {
