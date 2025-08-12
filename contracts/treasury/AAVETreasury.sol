@@ -52,6 +52,22 @@ contract AAVETreasury is TreasuryBase {
         revert("AAVETreasury: withdrawing assets is not supported, use redeem instead");
     }
 
+    function maxMint(address) public pure override returns (uint256) {
+        return 0;
+    }
+
+    function maxWithdraw(address) public pure override returns (uint256) {
+        return 0;
+    }
+
+    function previewMint(uint256) public pure override returns (uint256) {
+        return 0;
+    }
+
+    function previewWithdraw(uint256) public pure override returns (uint256) {
+        return 0;
+    }
+
     function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
         super._deposit(caller, receiver, assets, shares);
         pool.supply(
