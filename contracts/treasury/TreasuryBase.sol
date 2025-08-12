@@ -156,6 +156,14 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
         return super.redeem(shares, receiver, owner);
     }
 
+    function maxRedeem(address owner) public view virtual override(ERC4626) returns (uint256) {
+        return balanceOf(owner) - balanceOf(owner) * totalPositions / totalAssets();
+    }
+
+    function maxWithdraw(address owner) public view virtual override(ERC4626) returns (uint256) {
+        return _convertToAssets(maxRedeem(owner), Math.Rounding.Down);
+    }
+
     function totalAssets() public view virtual override returns (uint256) {
         return IERC20(asset()).balanceOf(address(this)) + totalPositions;
     }
