@@ -36,8 +36,10 @@ contract AAVETreasury is TreasuryBase {
             _positions[id].anchorPrices = anchorPrices;
             expiries[expiry].push(id);
         }
-        _positions[id].amount += amount;
-        totalPositions += amount;
+        uint256 index = pool.getReserveNormalizedIncome(address(asset())); // ray
+        uint256 scaled = (amount * 1e27) / index;
+        _positions[id].amount += scaled;
+        totalPositions += scaled;
         if (minExpiry == 0 || expiry < minExpiry) {
             minExpiry = expiry;
         }
@@ -100,6 +102,7 @@ contract AAVETreasury is TreasuryBase {
     }
 
     function totalAssets() public view override returns (uint256) {
-        return aToken.balanceOf(address(this)) + totalPositions;
+        uint256 index = pool.getReserveNormalizedIncome(address(asset())); // ray
+        return aToken.balanceOf(address(this)) + totalPositions * index / 1e27;
     }
 }
