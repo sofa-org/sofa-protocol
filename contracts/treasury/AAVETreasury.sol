@@ -29,6 +29,9 @@ contract AAVETreasury is TreasuryBase {
     function mintPosition(uint256 expiry, uint256[2] calldata anchorPrices, uint256 amount, address maker) external override nonReentrant onlyVaults {
         require(amount > 0, "Treasury: amount must be greater than zero");
         require(factory.makers(maker), "Treasury: signer is not a maker");
+        uint256 index = pool.getReserveNormalizedIncome(address(asset())); // ray
+        uint256 scaled = (amount * 1e27) / index;
+        require(scaled > 0, "Treasury: scaled amount must be greater than zero");
         bytes32 id = keccak256(abi.encodePacked(msg.sender, expiry, anchorPrices));
         if (_positions[id].amount == 0) {
             _positions[id].vault = msg.sender;
@@ -36,8 +39,6 @@ contract AAVETreasury is TreasuryBase {
             _positions[id].anchorPrices = anchorPrices;
             expiries[expiry].push(id);
         }
-        uint256 index = pool.getReserveNormalizedIncome(address(asset())); // ray
-        uint256 scaled = (amount * 1e27) / index;
         _positions[id].amount += scaled;
         totalPositions += scaled;
         if (minExpiry == 0 || expiry < minExpiry) {
