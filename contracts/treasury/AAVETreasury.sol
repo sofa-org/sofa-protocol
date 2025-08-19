@@ -27,7 +27,6 @@ contract AAVETreasury is TreasuryBase {
     }
 
     function mintPosition(uint256 expiry, uint256[2] calldata anchorPrices, uint256 amount, address maker) external override nonReentrant onlyVaults {
-        require(amount > 0, "Treasury: amount must be greater than zero");
         require(factory.makers(maker), "Treasury: signer is not a maker");
         uint256 index = pool.getReserveNormalizedIncome(address(asset())); // ray
         uint256 scaled = (amount * 1e27) / index;
@@ -93,13 +92,13 @@ contract AAVETreasury is TreasuryBase {
         }
 
         _burn(owner, shares);
-        pool.withdraw(
+        uint256 amount = pool.withdraw(
             address(asset()),
             totalSupply() > 0 ? assets - assets / 100 : assets,
             receiver
         );
 
-        emit Withdraw(caller, receiver, owner, assets, shares);
+        emit Withdraw(caller, receiver, owner, amount, shares);
     }
 
     function totalAssets() public view override returns (uint256) {
