@@ -160,38 +160,123 @@ describe("RCHTreasury", function () {
     });
   });
 
+  describe("maxMint", function () {
+    it("Should return 0", async function () {
+      expect(await treasury.maxMint(minter.address)).to.equal(0);
+    });
+  });
+
+  describe("maxWithdraw", function () {
+    it("Should return 0", async function () {
+      expect(await treasury.maxWithdraw(minter.address)).to.equal(0);
+    });
+  });
+
+  describe("previewMint", function () {
+    it("Should return 0", async function () {
+      expect(await treasury.previewMint(minter.address)).to.equal(0);
+    });
+  });
+
+  describe("previewWithdraw", function () {
+    it("Should return 0", async function () {
+      expect(await treasury.previewWithdraw(minter.address)).to.equal(0);
+    });
+  });
+  
   describe("Redeem", function () {
-    it("Should redeem shares", async function () {
+    it("Should redeem shares on Tuesday 8:00", async function () {
       const amount = parseEther("100");
       await treasury.connect(minter).deposit(amount, owner.address);
+      const tuesday = await getWeekday(2);
+      await time.increaseTo(tuesday);
       //transfer collateral to treasury
       await zenRCH.connect(minter).transfer(treasury.address, amount);
+      const amountChange = amount.sub(amount.div(100));
       await expect(treasury.connect(owner).redeem(amount.div(2), minter.address, owner.address))
-        .to.changeTokenBalances(collateral, [minter, treasury], [amount.sub(1), 0]);
-      expect(await zenRCH.balanceOf(treasury.address)).to.equal(amount.add(1));
-      expect(await treasury.totalAssets()).to.equal(amount.add(1));
+        .to.changeTokenBalances(collateral, [minter, treasury], [amountChange, 0]);
+      expect(await zenRCH.balanceOf(treasury.address)).to.equal(amount.mul(2).sub(amountChange));
+      expect(await treasury.totalAssets()).to.equal(amount.mul(2).sub(amountChange));
+      expect(await treasury.balanceOf(owner.address)).to.equal(amount.div(2));
+    });
+    it("Should redeem shares on Tuesday 15:59", async function () {
+      const amount = parseEther("100");
+      await treasury.connect(minter).deposit(amount, owner.address);
+      const thursday = await getWeekday(4,16) - 3;
+      await time.increaseTo(thursday);
+      //transfer collateral to treasury
+      await zenRCH.connect(minter).transfer(treasury.address, amount);
+      const amountChange = amount.sub(amount.div(100));
+      await expect(treasury.connect(owner).redeem(amount.div(2), minter.address, owner.address))
+        .to.changeTokenBalances(collateral, [minter, treasury], [amountChange, 0]);
+      expect(await zenRCH.balanceOf(treasury.address)).to.equal(amount.mul(2).sub(amountChange));
+      expect(await treasury.totalAssets()).to.equal(amount.mul(2).sub(amountChange));
       expect(await treasury.balanceOf(owner.address)).to.equal(amount.div(2));
     });
     it("Should redeem emit log", async function () {
       const amount = parseEther("100");
       await treasury.connect(minter).deposit(amount, owner.address);
+      const tuesday = await getWeekday(2);
+      await time.increaseTo(tuesday);
       //transfer collateral to treasury
       await zenRCH.connect(minter).transfer(treasury.address, amount);
+      const amountChange = amount.sub(amount.div(100));
       await expect(treasury.connect(owner).redeem(amount.div(2), minter.address, owner.address))
-        .to.emit(treasury, "Withdraw").withArgs(owner.address, minter.address, owner.address, amount.sub(1), amount.div(2));
+        .to.emit(treasury, "Withdraw").withArgs(owner.address, minter.address, owner.address, amountChange, amount.div(2));
+    });
+    it("Should redeem last shares without 1% fee", async function () {
+      const amount = parseEther("100");
+      await treasury.connect(minter).deposit(amount, owner.address);
+      const tuesday = await getWeekday(2);
+      await time.increaseTo(tuesday);
+      //transfer collateral to treasury
+      await zenRCH.connect(minter).transfer(treasury.address, amount);
+      const amountChange = amount.mul(2).sub(1);
+      await expect(treasury.connect(owner).redeem(amount, minter.address, owner.address))
+        .to.changeTokenBalances(collateral, [minter, treasury], [amountChange, 0]);
+      expect(await zenRCH.balanceOf(treasury.address)).to.equal(1);
+      expect(await treasury.totalAssets()).to.equal(1);
+      expect(await treasury.balanceOf(owner.address)).to.equal(0);
     });
     it("Should redeem others' shares if approved", async function () {
       const amount = parseEther("100");
       await treasury.connect(minter).deposit(amount, owner.address);
+      const tuesday = await getWeekday(2);
+      await time.increaseTo(tuesday);      
       //transfer collateral to treasury
       await zenRCH.connect(minter).transfer(treasury.address, amount);
+      const amountChange = amount.sub(amount.div(100));
       //approve
       await treasury.connect(owner).approve(minter.address, amount.div(2));
       await expect(treasury.connect(minter).redeem(amount.div(2), minter.address, owner.address))
-        .to.changeTokenBalances(collateral, [minter, treasury], [amount.sub(1), 0]);
-        expect(await zenRCH.balanceOf(treasury.address)).to.equal(amount.add(1));
-      expect(await treasury.totalAssets()).to.equal(amount.add(1));
+        .to.changeTokenBalances(collateral, [minter, treasury], [amountChange, 0]);
+      expect(await zenRCH.balanceOf(treasury.address)).to.equal(amount.mul(2).sub(amountChange));
+      expect(await treasury.totalAssets()).to.equal(amount.mul(2).sub(amountChange));
       expect(await treasury.balanceOf(owner.address)).to.equal(amount.div(2));
+    });
+    it("Should revert if redeem on Monday", async function () {
+      const amount = parseEther("100");
+      await treasury.connect(minter).deposit(amount, owner.address);
+      const monday = await getWeekday(1);
+      await time.increaseTo(monday);
+      await expect(treasury.connect(owner).redeem(amount.div(2), minter.address, owner.address))
+        .to.be.revertedWith("Treasury: withdrawals only allowed on Tuesdays and Thursdays 8:00-16:00 UTC");
+    });
+    it("Should revert if redeem on Tuesday 7:00", async function () {
+      const amount = parseEther("100");
+      await treasury.connect(minter).deposit(amount, owner.address);
+      const tuesday = await getWeekday(2, 7);
+      await time.increaseTo(tuesday);
+      await expect(treasury.connect(owner).redeem(amount.div(2), minter.address, owner.address))
+        .to.be.revertedWith("Treasury: withdrawals only allowed on Tuesdays and Thursdays 8:00-16:00 UTC");
+    });
+    it("Should revert if redeem on Thursday 17:00", async function () {
+      const amount = parseEther("100");
+      await treasury.connect(minter).deposit(amount, owner.address);
+      const tuesday = await getWeekday(2, 17);
+      await time.increaseTo(tuesday);
+      await expect(treasury.connect(owner).redeem(amount.div(2), minter.address, owner.address))
+        .to.be.revertedWith("Treasury: withdrawals only allowed on Tuesdays and Thursdays 8:00-16:00 UTC");
     });
   });
   
@@ -201,6 +286,7 @@ describe("RCHTreasury", function () {
     let productMintC: any;
     let productMintD: any;
     let productMintE: any;
+    let productMintF: any;
     let expiry, expiryD, anchorPrices, anchorPricesC, anchorPricesD, anchorPricesE;
     beforeEach(async function () {
       //deposit to treasury
@@ -276,6 +362,17 @@ describe("RCHTreasury", function () {
         maker,
         eip721DomainA
       );
+      const signatureF = await signMintParams(
+        totalCollateral,
+        expiry,
+        anchorPrices,
+        0,
+        deadline,
+        vaultA,
+        automatorBase,
+        maker,
+        eip721DomainA
+      );
       //product
       productMint = { //win
         vault: vaultA.address,
@@ -337,8 +434,19 @@ describe("RCHTreasury", function () {
           makerSignature: signatureE
         }
       };
+      productMintF = {
+        vault: vaultA.address,
+        totalCollateral: totalCollateral,
+        mintParams: {
+          expiry: expiry,
+          anchorPrices: anchorPrices,
+          makerCollateral: 0,
+          deadline: deadline,
+          maker: maker.address,
+          makerSignature: signatureF
+        }
+      };
     });
-    
     it("should mint product", async function () {
       const signaturesSignature = await signSignatures([productMint], maker);
       await expect(automatorBase.mintProducts([productMint], signaturesSignature))
@@ -357,6 +465,11 @@ describe("RCHTreasury", function () {
       await automatorFactory.disableMakers([maker.address]);
       await expect(automatorBase.mintProducts([productMint], signaturesSignature))
         .to.be.revertedWith("Treasury: signer is not a maker");
+    });
+    it("should revert if maker collateral is zero", async function () {
+      const signaturesSignature = await signSignatures([productMintF], maker);
+      await expect(automatorBase.mintProducts([productMintF], signaturesSignature))
+        .to.be.revertedWith("Treasury: amount must be greater than zero");
     });
     it("should deposit 0 to burn position", async function () {
       //mint
@@ -435,11 +548,13 @@ describe("RCHTreasury", function () {
       await automatorBase.mintProducts([productMint], signaturesSignature);
       await time.increaseTo(expiry);
       await oracle.settle();
+      const tuesday = await getWeekday(2);
+      await time.increaseTo(tuesday);
       //redeem
       const shares = parseEther("100");
       await expect(treasury.connect(owner).redeem(shares, minter.address, owner.address))
         .to.changeTokenBalances(collateral, [minter, treasury], [parseEther("90"), 0]);
-      expect(await treasury.minExpiry()).to.equal(expiry + 86400);
+      expect(await treasury.minExpiry()).to.equal(tuesday + 86400);
       await expect(treasury.expiries(expiry, 0)).to.be.reverted;
       expect(await zenRCH.balanceOf(treasury.address)).to.equal(0);
       expect(await treasury.totalPositions()).to.equal(0);
@@ -508,6 +623,13 @@ describe("RCHTreasury", function () {
     }); 
   });
 })
+
+async function getWeekday(weekday: number, oclock: number = 8) {
+  const day = Math.ceil(await time.latest() / 86400);
+  const nextWeek = Math.ceil(day / 7);
+  const ts = (nextWeek * 7 + 7 - 4 + weekday ) * 86400 + oclock * 3600;
+  return ts;
+}
 
 function computeId(sender, expiry, anchorPrices) {
   const packed = ethers.utils.solidityPack(

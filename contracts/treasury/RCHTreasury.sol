@@ -47,6 +47,22 @@ contract RCHTreasury is TreasuryBase {
     function withdraw(uint256, address, address) public pure override returns (uint256) {
         revert("RCHTreasury: withdrawing is not supported, use redeem instead");
     }
+    
+    function maxMint(address) public pure override returns (uint256) {
+        return 0;
+    }
+
+    function maxWithdraw(address) public pure override returns (uint256) {
+        return 0;
+    }
+
+    function previewMint(uint256) public pure override returns (uint256) {
+        return 0;
+    }
+
+    function previewWithdraw(uint256) public pure override returns (uint256) {
+        return 0;
+    }
 
     function _withdraw(
         address caller,

@@ -186,8 +186,9 @@ abstract contract TreasuryBase is ERC4626, ERC1155Holder, Ownable, ReentrancyGua
         }
 
         _burn(owner, shares);
-        IERC20(asset()).safeTransfer(receiver, totalSupply() > 0 ? assets - assets / 100 : assets);
+        uint256 amount = totalSupply() > 0 ? assets - assets / 100 : assets;
+        IERC20(asset()).safeTransfer(receiver, amount);
 
-        emit Withdraw(caller, receiver, owner, assets, shares);
+        emit Withdraw(caller, receiver, owner, amount, shares);
     }
 }
