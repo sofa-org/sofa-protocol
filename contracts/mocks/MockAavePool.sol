@@ -106,4 +106,8 @@ contract MockAavePool {
     return reserveData;
   }
 
+  function getReserveNormalizedIncome(address asset) external view returns (uint256 index) {
+    require(asset == address(token), "Invalid asset");
+    index = reserveData.liquidityIndex > 0 ? reserveData.liquidityIndex : 1e27; // Default to 1e27 if liquidityIndex is zero
+  }
 }

@@ -29,7 +29,7 @@ describe("SimpleSmartTrendVault", function () {
     const strategy = await Strategy.deploy();
 
     // Deploy SmartTrendVault contract
-    const Vault = await ethers.getContractFactory("SimpleSmartTrendVault");
+    const Vault = await ethers.getContractFactory("contracts/vaults/SimpleSmartTrendVault.sol:SimpleSmartTrendVault");
     vault = await upgrades.deployProxy(Vault, [
       "Sofa ETH",
       "sfETH",
