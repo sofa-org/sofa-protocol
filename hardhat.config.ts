@@ -122,7 +122,18 @@ const config: HardhatUserConfig = {
       polygonMumbai: process.env.POLYGONSCAN_API_KEY,
       bsc: process.env.BSCSCAN_API_KEY,
       polygon: process.env.POLYGONSCAN_API_KEY,
+      sei: process.env.SEITRACE_API_KEY,
     },
+    customChains: [
+      {
+        network: 'sei',
+        chainId: 1329,
+        urls: {
+          apiURL: 'https://seitrace.com/pacific-1/api',
+          browserURL: 'https://seitrace.com'
+        }
+      }
+    ]
   },
   abiExporter: {
     path: './abis',
